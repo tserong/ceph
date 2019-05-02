@@ -273,7 +273,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct, RGWObjectCtx *obj_
   }
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   return (ret == -ENOENT) ? -ERR_NO_SUCH_UPLOAD : ret;
 }
 

@@ -3415,7 +3415,8 @@ int RGWRados::swift_versioning_copy(RGWObjectCtx& obj_ctx,
                NULL, /* string *petag */
                NULL, /* void (*progress_cb)(off_t, void *) */
                NULL, /* void *progress_data */
-               dpp); 
+               dpp,
+               null_yield);
   if (r == -ECANCELED || r == -ENOENT) {
     /* Has already been overwritten, meaning another rgw process already
      * copied it out */
@@ -3509,7 +3510,8 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
                        nullptr,       /* string *petag */
                        nullptr,       /* void (*progress_cb)(off_t, void *) */
                        nullptr,       /* void *progress_data */
-                       dpp);      
+                       dpp,
+                       null_yield);
     if (ret == -ECANCELED || ret == -ENOENT) {
       /* Has already been overwritten, meaning another rgw process already
        * copied it out */
@@ -3538,7 +3540,7 @@ int RGWRados::swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
 int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_size,
                                            map<string, bufferlist>& attrs,
                                            bool assume_noent, bool modify_tail,
-                                           void *_index_op)
+                                           void *_index_op, optional_yield y)
 {
   RGWRados::Bucket::UpdateIndex *index_op = static_cast<RGWRados::Bucket::UpdateIndex *>(_index_op);
   RGWRados *store = target->get_store();
@@ -3687,7 +3689,7 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
 
   if (!index_op->is_prepared()) {
     tracepoint(rgw_rados, prepare_enter, req_id.c_str());
-    r = index_op->prepare(CLS_RGW_OP_ADD, &state->write_tag);
+    r = index_op->prepare(CLS_RGW_OP_ADD, &state->write_tag, y);
     tracepoint(rgw_rados, prepare_exit, req_id.c_str());
     if (r < 0)
       return r;
@@ -3808,7 +3810,7 @@ done_cancel:
 }
 
 int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
-                                           map<string, bufferlist>& attrs)
+                                           map<string, bufferlist>& attrs, optional_yield y)
 {
   RGWBucketInfo& bucket_info = target->get_bucket_info();
 
@@ -3819,13 +3821,13 @@ int RGWRados::Object::Write::write_meta(uint64_t size, uint64_t accounted_size,
   bool assume_noent = (meta.if_match == NULL && meta.if_nomatch == NULL);
   int r;
   if (assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
     if (r == -EEXIST) {
       assume_noent = false;
     }
   }
   if (!assume_noent) {
-    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op);
+    r = _do_write_meta(size, accounted_size, attrs, assume_noent, meta.modify_tail, (void *)&index_op, y);
   }
   return r;
 }
@@ -4005,7 +4007,7 @@ static void set_copy_attrs(map<string, bufferlist>& src_attrs,
   }
 }
 
-int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp)
+int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, const DoutPrefixProvider *dpp, optional_yield y)
 {
   map<string, bufferlist> attrset;
 
@@ -4029,7 +4031,7 @@ int RGWRados::rewrite_obj(RGWBucketInfo& dest_bucket_info, const rgw_obj& obj, c
 
   return copy_obj_data(rctx, dest_bucket_info, dest_bucket_info.placement_rule,
                        read_op, obj_size - 1, obj, NULL, mtime, attrset,
-                       0, real_time(), NULL, dpp);
+                       0, real_time(), NULL, dpp, y);
 }
 
 struct obj_time_weight {
@@ -4451,7 +4453,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     bool canceled = false;
     ret = processor.complete(cb.get_data_len(), etag, mtime, set_mtime,
                              attrs, delete_at, nullptr, nullptr, nullptr,
-                             zones_trace, &canceled);
+                             zones_trace, &canceled, null_yield);
     if (ret < 0) {
       goto set_err_state;
     }
@@ -4576,7 +4578,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
                string *petag,
                void (*progress_cb)(off_t, void *),
                void *progress_data,
-               const DoutPrefixProvider *dpp)
+               const DoutPrefixProvider *dpp,
+               optional_yield y)
 {
   int ret;
   uint64_t obj_size;
@@ -4728,7 +4731,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   if (copy_data) { /* refcounting tail wouldn't work here, just copy the data */
     attrs.erase(RGW_ATTR_TAIL_TAG);
     return copy_obj_data(obj_ctx, dest_bucket_info, dest_placement, read_op, obj_size - 1, dest_obj,
-                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp);
+                         mtime, real_time(), attrs, olh_epoch, delete_at, petag, dpp, y);
   }
 
   RGWObjManifest::obj_iterator miter = astate->manifest.obj_begin();
@@ -4814,7 +4817,7 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
   write_op.meta.delete_at = delete_at;
   write_op.meta.modify_tail = !copy_itself;
 
-  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs);
+  ret = write_op.write_meta(obj_size, astate->accounted_size, attrs, y);
   if (ret < 0) {
     goto done_ret;
   }
@@ -4853,7 +4856,8 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
                uint64_t olh_epoch,
 	       real_time delete_at,
                string *petag,
-               const DoutPrefixProvider *dpp)
+               const DoutPrefixProvider *dpp,
+               optional_yield y)
 {
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
@@ -4862,7 +4866,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   using namespace rgw::putobj;
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, &dest_placement,
                                   dest_bucket_info.owner, obj_ctx,
-                                  dest_obj, olh_epoch, tag, dpp, null_yield);
+                                  dest_obj, olh_epoch, tag, dpp, y);
   int ret = processor.prepare();
   if (ret < 0)
     return ret;
@@ -4916,7 +4920,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   }
 
   return processor.complete(accounted_size, etag, mtime, set_mtime, attrs, delete_at,
-                            nullptr, nullptr, nullptr, nullptr, nullptr);
+                            nullptr, nullptr, nullptr, nullptr, nullptr, y);
 }
 
 int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
@@ -4925,7 +4929,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                              const rgw_placement_rule& placement_rule,
                              const real_time& mtime,
                              uint64_t olh_epoch,
-                             const DoutPrefixProvider *dpp)
+                             const DoutPrefixProvider *dpp,
+                             optional_yield y)
 {
   map<string, bufferlist> attrs;
   real_time read_mtime;
@@ -4960,7 +4965,8 @@ int RGWRados::transition_obj(RGWObjectCtx& obj_ctx,
                       olh_epoch,
                       real_time(),
                       nullptr /* petag */,
-                      dpp);
+                      dpp,
+                      y);
   if (ret < 0) {
     return ret;
   }
@@ -5397,7 +5403,7 @@ void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, 
  * obj: name of the object to delete
  * Returns: 0 on success, -ERR# otherwise.
  */
-int RGWRados::Object::Delete::delete_obj()
+int RGWRados::Object::Delete::delete_obj(optional_yield y)
 {
   RGWRados *store = target->get_store();
   rgw_obj& src_obj = target->get_obj();
@@ -5544,7 +5550,7 @@ int RGWRados::Object::Delete::delete_obj()
   index_op.set_zones_trace(params.zones_trace);
   index_op.set_bilog_flags(params.bilog_flags);
 
-  r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag);
+  r = index_op.prepare(CLS_RGW_OP_DEL, &state->write_tag, y);
   if (r < 0)
     return r;
 
@@ -5605,7 +5611,7 @@ int RGWRados::delete_obj(RGWObjectCtx& obj_ctx,
   del_op.params.expiration_time = expiration_time;
   del_op.params.zones_trace = zones_trace;
 
-  return del_op.delete_obj();
+  return del_op.delete_obj(null_yield);
 }
 
 int RGWRados::delete_raw_obj(const rgw_raw_obj& obj)
@@ -6154,12 +6160,13 @@ int RGWRados::set_attr(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& obj
 {
   map<string, bufferlist> attrs;
   attrs[name] = bl;
-  return set_attrs(ctx, bucket_info, obj, attrs, NULL);
+  return set_attrs(ctx, bucket_info, obj, attrs, NULL, null_yield);
 }
 
 int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& src_obj,
                         map<string, bufferlist>& attrs,
-                        map<string, bufferlist>* rmattrs)
+                        map<string, bufferlist>* rmattrs,
+                        optional_yield y)
 {
   rgw_obj obj = src_obj;
   if (obj.key.instance == "null") {
@@ -6232,7 +6239,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
     string tag;
     append_rand_alpha(cct, tag, tag, 32);
     state->write_tag = tag;
-    r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag);
+    r = index_op.prepare(CLS_RGW_OP_ADD, &state->write_tag, y);
 
     if (r < 0)
       return r;
@@ -6454,7 +6461,7 @@ int RGWRados::Bucket::UpdateIndex::guard_reshard(BucketShard **pbs, std::functio
   return 0;
 }
 
-int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag)
+int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_tag, optional_yield y)
 {
   if (blind) {
     return 0;
@@ -6470,7 +6477,7 @@ int RGWRados::Bucket::UpdateIndex::prepare(RGWModifyOp op, const string *write_t
   }
 
   int r = guard_reshard(nullptr, [&](BucketShard *bs) -> int {
-				   return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, zones_trace);
+				   return store->cls_obj_prepare_op(*bs, op, optag, obj, bilog_flags, y, zones_trace);
 				 });
 
   if (r < 0) {
@@ -8978,7 +8985,7 @@ bool RGWRados::process_expire_objects()
 }
 
 int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
-                                 rgw_obj& obj, uint16_t bilog_flags, rgw_zone_set *_zones_trace)
+                                 rgw_obj& obj, uint16_t bilog_flags, optional_yield y, rgw_zone_set *_zones_trace)
 {
   rgw_zone_set zones_trace;
   if (_zones_trace) {
@@ -8990,7 +8997,7 @@ int RGWRados::cls_obj_prepare_op(BucketShard& bs, RGWModifyOp op, string& tag,
   cls_rgw_obj_key key(obj.key.get_index_key_name(), obj.key.instance);
   cls_rgw_guard_bucket_resharding(o, -ERR_BUSY_RESHARDING);
   cls_rgw_bucket_prepare_op(o, op, tag, key, obj.key.get_loc(), svc.zone->get_zone().log_data, bilog_flags, zones_trace);
-  return bs.index_ctx.operate(bs.bucket_obj, &o);
+  return rgw_rados_operate(bs.index_ctx, bs.bucket_obj, &o, y);
 }
 
 int RGWRados::cls_obj_complete_op(BucketShard& bs, const rgw_obj& obj, RGWModifyOp op, string& tag,
@@ -10086,7 +10093,8 @@ int RGWRados::delete_raw_obj_aio(const rgw_raw_obj& obj, list<librados::AioCompl
 
 int RGWRados::delete_obj_aio(const rgw_obj& obj,
                              RGWBucketInfo& bucket_info, RGWObjState *astate,
-                             list<librados::AioCompletion *>& handles, bool keep_index_consistent)
+                             list<librados::AioCompletion *>& handles, bool keep_index_consistent,
+                             optional_yield y)
 {
   rgw_rados_ref ref;
   int ret = get_obj_head_ref(bucket_info, obj, &ref);
@@ -10099,7 +10107,7 @@ int RGWRados::delete_obj_aio(const rgw_obj& obj,
     RGWRados::Bucket bop(this, bucket_info);
     RGWRados::Bucket::UpdateIndex index_op(&bop, obj);
 
-    ret = index_op.prepare(CLS_RGW_OP_DEL, &astate->write_tag);
+    ret = index_op.prepare(CLS_RGW_OP_DEL, &astate->write_tag, y);
     if (ret < 0) {
       lderr(cct) << "ERROR: failed to prepare index op with ret=" << ret << dendl;
       return ret;
