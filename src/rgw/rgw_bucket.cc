@@ -622,7 +622,8 @@ static int drain_handles(list<librados::AioCompletion *>& pending)
 }
 
 int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
-                                int concurrent_max, bool keep_index_consistent)
+                                int concurrent_max, bool keep_index_consistent,
+                                optional_yield y)
 {
   int ret;
   map<RGWObjCategory, RGWStorageStats> stats;
@@ -673,7 +674,7 @@ int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket,
       RGWObjState *astate = NULL;
       rgw_obj obj(bucket, (*it).key);
 
-      ret = store->get_obj_state(&obj_ctx, info, obj, &astate, false);
+      ret = store->get_obj_state(&obj_ctx, info, obj, &astate, false, y);
       if (ret == -ENOENT) {
         dout(1) << "WARNING: cannot find obj state for obj " << obj.get_oid() << dendl;
         continue;
@@ -965,7 +966,7 @@ int RGWBucket::remove(RGWBucketAdminOpState& op_state, bool bypass_gc,
 
   if (bypass_gc) {
     if (delete_children) {
-      ret = rgw_remove_bucket_bypass_gc(store, bucket, op_state.get_max_aio(), keep_index_consistent);
+      ret = rgw_remove_bucket_bypass_gc(store, bucket, op_state.get_max_aio(), keep_index_consistent, null_yield);
     } else {
       set_err_msg(err_msg, "purge objects should be set for gc to be bypassed");
       return -EINVAL;
@@ -1169,6 +1170,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
     int r = store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD,
 					   marker, prefix, 1000, true,
 					   result, &is_truncated, &marker,
+                                           null_yield,
 					   bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
@@ -1260,7 +1262,7 @@ int RGWBucket::get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolic
     RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
     RGWRados::Object::Read rop(&op_target);
 
-    int ret = rop.get_attr(RGW_ATTR_ACL, bl);
+    int ret = rop.get_attr(RGW_ATTR_ACL, bl, null_yield);
     if (ret < 0)
       return ret;
 

@@ -395,7 +395,7 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
   RGWRados::Object op_target(store, bucket_info, ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
+  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl, null_yield);
 }
 
 static bool is_valid_op(const lc_op& op)

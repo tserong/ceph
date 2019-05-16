@@ -1431,7 +1431,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1493,7 +1493,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(null_yield);
   bool needs_fixing = (ret == -ENOENT);
 
   f->dump_bool("needs_fixing", needs_fixing);
@@ -1528,7 +1528,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   bool needs_fixing;
   string status;
 
-  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
+  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing, null_yield);
   if (ret < 0) {
     cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
     status = "failed";
@@ -5806,7 +5806,7 @@ next:
 
     RGWObjState *state;
 
-    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false); /* don't follow olh */
+    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false, null_yield); /* don't follow olh */
     if (ret < 0) {
       return -ret;
     }
@@ -6129,6 +6129,7 @@ next:
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
 				       prefix, 1000, true,
 				       result, &is_truncated, &marker,
+                                       null_yield,
 				       bucket_object_check_filter);
 
       if (r < 0 && r != -ENOENT) {
@@ -6411,7 +6412,7 @@ next:
     read_op.params.attrs = &attrs;
     read_op.params.obj_size = &obj_size;
 
-    ret = read_op.prepare();
+    ret = read_op.prepare(null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;

@@ -244,7 +244,7 @@ static int get_obj_policy_from_attr(CephContext *cct,
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read rop(&op_target);
 
-  ret = rop.get_attr(RGW_ATTR_ACL, bl);
+  ret = rop.get_attr(RGW_ATTR_ACL, bl, null_yield);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -262,7 +262,7 @@ static int get_obj_policy_from_attr(CephContext *cct,
 
   if (storage_class) {
     bufferlist scbl;
-    int r = rop.get_attr(RGW_ATTR_STORAGE_CLASS, scbl);
+    int r = rop.get_attr(RGW_ATTR_STORAGE_CLASS, scbl, null_yield);
     if (r >= 0) {
       *storage_class = scbl.to_str();
     } else {
@@ -327,7 +327,7 @@ static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& ob
 
   read_op.params.attrs = &attrs;
 
-  return read_op.prepare();
+  return read_op.prepare(s->yield);
 }
 
 static int get_obj_head(RGWRados *store, struct req_state *s,
@@ -342,7 +342,7 @@ static int get_obj_head(RGWRados *store, struct req_state *s,
 
   read_op.params.attrs = attrs;
 
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(s->yield);
   if (ret < 0) {
     return ret;
   }
@@ -351,7 +351,7 @@ static int get_obj_head(RGWRados *store, struct req_state *s,
     return 0;
   }
 
-  ret = read_op.read(0, s->cct->_conf->rgw_max_chunk_size, *pbl);
+  ret = read_op.read(0, s->cct->_conf->rgw_max_chunk_size, *pbl, s->yield);
 
   return 0;
 }
@@ -447,7 +447,7 @@ static int modify_obj_attr(RGWRados *store, struct req_state *s, const rgw_obj& 
 
   read_op.params.attrs = &attrs;
   
-  int r = read_op.prepare();
+  int r = read_op.prepare(s->yield);
   if (r < 0) {
     return r;
   }
@@ -1404,7 +1404,7 @@ int RGWGetObj::read_user_manifest_part(rgw_bucket& bucket,
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
-  op_ret = read_op.prepare();
+  op_ret = read_op.prepare(s->yield);
   if (op_ret < 0)
     return op_ret;
   op_ret = read_op.range_to_ofs(ent.meta.accounted_size, cur_ofs, cur_end);
@@ -1895,7 +1895,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
   /* garbage collection related handling */
   utime_t start_time = ceph_clock_now();
   if (start_time > gc_invalidate_time) {
-    int r = store->defer_gc(s->obj_ctx, s->bucket_info, obj);
+    int r = store->defer_gc(s->obj_ctx, s->bucket_info, obj, s->yield);
     if (r < 0) {
       ldpp_dout(this, 0) << "WARNING: could not defer gc entry for obj" << dendl;
     }
@@ -1993,7 +1993,7 @@ void RGWGetObj::execute()
   read_op.params.lastmod = &lastmod;
   read_op.params.obj_size = &s->obj_size;
 
-  op_ret = read_op.prepare();
+  op_ret = read_op.prepare(s->yield);
   if (op_ret < 0)
     goto done_err;
   version_id = read_op.state.obj.key.instance;
@@ -3476,7 +3476,7 @@ int RGWPutObj::get_data(const off_t fst, const off_t lst, bufferlist& bl)
   read_op.params.obj_size = &obj_size;
   read_op.params.attrs = &attrs;
 
-  ret = read_op.prepare();
+  ret = read_op.prepare(s->yield);
   if (ret < 0)
     return ret;
 
@@ -3629,7 +3629,8 @@ void RGWPutObj::execute()
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
                                           obj,
-                                          this);
+                                          this,
+                                          s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -3691,7 +3692,7 @@ void RGWPutObj::execute()
         s->req_id, this, s->yield);
   }
 
-  op_ret = processor->prepare();
+  op_ret = processor->prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "processor->prepare() returned ret=" << op_ret
 		      << dendl;
@@ -3704,7 +3705,7 @@ void RGWPutObj::execute()
 
     RGWObjState *astate;
     op_ret = store->get_obj_state(&obj_ctx, copy_source_bucket_info, obj,
-                                  &astate, true, false);
+                                  &astate, true, s->yield, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "ERROR: get copy source obj state returned with error" << op_ret << dendl;
       return;
@@ -4012,7 +4013,7 @@ void RGWPostObj::execute()
                                     s->bucket_owner.get_id(),
                                     *static_cast<RGWObjectCtx*>(s->obj_ctx),
                                     obj, 0, s->req_id, this, s->yield);
-    op_ret = processor.prepare();
+    op_ret = processor.prepare(s->yield);
     if (op_ret < 0) {
       return;
     }
@@ -4875,7 +4876,8 @@ void RGWCopyObj::execute()
                                         dest_bucket_info.owner,
                                         dest_bucket_info,
                                         dst_obj,
-                                        this);
+                                        this,
+                                        s->yield);
   if (op_ret < 0) {
     return;
   }
@@ -6759,7 +6761,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   AtomicObjectProcessor processor(&*aio, store, binfo, &s->dest_placement, bowner.get_id(),
                                   obj_ctx, obj, 0, s->req_id, this, s->yield);
 
-  op_ret = processor.prepare();
+  op_ret = processor.prepare(s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "cannot prepare processor due to ret=" << op_ret << dendl;
     return op_ret;
@@ -7050,14 +7052,14 @@ void RGWGetObjLayout::execute()
                           rgw_obj(s->bucket, s->object));
   RGWRados::Object::Read stat_op(&target);
 
-  op_ret = stat_op.prepare();
+  op_ret = stat_op.prepare(s->yield);
   if (op_ret < 0) {
     return;
   }
 
   head_obj = stat_op.state.head_obj;
 
-  op_ret = target.get_manifest(&manifest);
+  op_ret = target.get_manifest(&manifest, s->yield);
 }
 
 
