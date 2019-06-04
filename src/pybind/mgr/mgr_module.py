@@ -177,6 +177,9 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
     def get_config(self, key):
         return self._ceph_get_config(key)
 
+    def get_option(self, key):
+        return self._ceph_get_option(key)   
+
     def get_active_uri(self):
         return self._ceph_get_active_uri()
 
@@ -400,6 +403,9 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: str
         """
         return self._ceph_get_mgr_id()
+
+    def get_ceph_option(self, key):
+        return self._ceph_get_option(key)
 
     def get_config(self, key, default=None):
         """

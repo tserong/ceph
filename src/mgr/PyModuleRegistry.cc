@@ -423,6 +423,7 @@ static void _list_modules(
   std::set<std::string> *modules)
 {
   DIR *dir = opendir(path.c_str());
+
   if (!dir) {
     return;
   }

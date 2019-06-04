@@ -106,6 +106,11 @@ std::string get_default_pool_name();
 std::string get_pool_name(const boost::program_options::variables_map &vm,
                           size_t *arg_index);
 
+int get_pool_and_namespace_names(
+    const boost::program_options::variables_map &vm,
+    bool default_empty_pool_name, bool validate_pool_name,
+    std::string* pool_name, std::string* namespace_name, size_t *arg_index);
+
 int get_pool_image_snapshot_names(
     const boost::program_options::variables_map &vm,
     argument_types::ArgumentModifier mod, size_t *spec_arg_index,
@@ -167,6 +172,8 @@ int get_formatter(const boost::program_options::variables_map &vm,
 
 void init_context();
 
+int init_rados(librados::Rados *rados);
+
 int init(const std::string &pool_name, librados::Rados *rados,
          librados::IoCtx *io_ctx);
 
@@ -211,6 +218,89 @@ std::string timestr(time_t t);
 uint64_t get_rbd_default_features(CephContext* cct);
 
 } // namespace utils
+
+inline std::ostream& format_u(std::ostream& out, const uint64_t v, const uint64_t n,
+      const int index, const uint64_t mult, const char* u)
+  {
+    char buffer[32];
+
+    if (index == 0) {
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
+    } else if ((v % mult) == 0) {
+      // If this is an even multiple of the base, always display
+      // without any decimal fraction.
+      (void) snprintf(buffer, sizeof(buffer), "%" PRId64 "%s", n, u);
+    } else {
+      // We want to choose a precision that reflects the best choice
+      // for fitting in 5 characters.  This can get rather tricky when
+      // we have numbers that are very close to an order of magnitude.
+      // For example, when displaying 10239 (which is really 9.999K),
+      // we want only a single place of precision for 10.0K.  We could
+      // develop some complex heuristics for this, but it's much
+      // easier just to try each combination in turn.
+      int i;
+      for (i = 2; i >= 0; i--) {
+        if (snprintf(buffer, sizeof(buffer), "%.*f%s", i,
+          static_cast<double>(v) / mult, u) <= 7)
+          break;
+      }
+    }
+
+    return out << buffer;
+  }
+
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * decimal unit prefix (the classic SI units). No actual unit will be added.
+ */
+struct si_u_t {
+  uint64_t v;
+  explicit si_u_t(uint64_t _v) : v(_v) {};
+};
+
+inline std::ostream& operator<<(std::ostream& out, const si_u_t& b)
+{
+  uint64_t n = b.v;
+  int index = 0;
+  uint64_t mult = 1;
+  const char* u[] = {"", "k", "M", "G", "T", "P", "E"};
+
+  while (n >= 1000 && index < 7) {
+    n /= 1000;
+    index++;
+    mult *= 1000;
+  }
+
+  return format_u(out, b.v, n, index, mult, u[index]);
+}
+
+/*
+ * Use this struct to pretty print values that should be formatted with a
+ * binary unit prefix (IEC units). Since binary unit prefixes are to be used for
+ * "multiples of units in data processing, data transmission, and digital
+ * information" (so bits and bytes) and so far bits are not printed, the unit
+ * "B" for "byte" is added besides the multiplier.
+ */
+struct byte_u_t {
+  uint64_t v;
+  explicit byte_u_t(uint64_t _v) : v(_v) {};
+};
+
+inline std::ostream& operator<<(std::ostream& out, const byte_u_t& b)
+{
+  uint64_t n = b.v;
+  int index = 0;
+  const char* u[] = {" B", " KiB", " MiB", " GiB", " TiB", " PiB", " EiB"};
+
+  while (n >= 1024 && index < 7) {
+    n /= 1024;
+    index++;
+  }
+
+  return format_u(out, b.v, n, index, 1ULL << (10 * index), u[index]);
+}
+
+
 } // namespace rbd
 
 #endif // CEPH_RBD_UTILS_H

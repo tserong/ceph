@@ -27,6 +27,7 @@ set(rbd_srcs
   action/MirrorImage.cc
   action/Nbd.cc
   action/ObjectMap.cc
+  action/Perf.cc
   action/Pool.cc
   action/Remove.cc
   action/Rename.cc
@@ -46,7 +47,7 @@ target_link_libraries(rbd librbd librados
   cls_journal_client cls_rbd_client
   rbd_types
   journal
-  ceph-common global
+  ceph-common global ncurses
   ${BLKID_LIBRARIES} ${CMAKE_DL_LIBS})
 if(WITH_KRBD)
   target_link_libraries(rbd 

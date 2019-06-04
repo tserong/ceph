@@ -299,6 +299,53 @@ int get_special_pool_image_names(const po::variables_map &vm,
   return 0;
 }
 
+int get_pool_and_namespace_names(
+    const boost::program_options::variables_map &vm,
+    bool default_empty_pool_name, bool validate_pool_name,
+    std::string* pool_name, std::string* namespace_name, size_t *arg_index) {
+  if (namespace_name != nullptr && vm.count(at::NAMESPACE_NAME)) {
+    *namespace_name = vm[at::NAMESPACE_NAME].as<std::string>();
+  }
+
+  if (vm.count(at::POOL_NAME)) {
+    *pool_name = vm[at::POOL_NAME].as<std::string>();
+  } else {
+    *pool_name = get_positional_argument(vm, *arg_index);
+    if (!pool_name->empty()) {
+      if (namespace_name != nullptr) {
+        auto slash_pos = pool_name->find_last_of('/');
+        if (slash_pos != std::string::npos) {
+          *namespace_name = pool_name->substr(slash_pos + 1);
+        }
+        *pool_name = pool_name->substr(0, slash_pos);
+      }
+      ++(*arg_index);
+    }
+  }
+
+  if (default_empty_pool_name && pool_name->empty()) {
+    *pool_name = get_default_pool_name();
+  }
+
+  if (!g_ceph_context->_conf->get_val<bool>("rbd_validate_names")) {
+    validate_pool_name = false;
+  }
+
+  if (validate_pool_name &&
+      pool_name->find_first_of("/@") != std::string::npos) {
+    std::cerr << "rbd: invalid pool '" << *pool_name << "'" << std::endl;
+    return -EINVAL;
+  } else if (namespace_name != nullptr &&
+             namespace_name->find_first_of("/@") != std::string::npos) {
+    std::cerr << "rbd: invalid namespace '" << *namespace_name << "'"
+              << std::endl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+
 int get_pool_image_id(const po::variables_map &vm,
 		      size_t *spec_arg_index,
 		      std::string *pool_name,
@@ -846,6 +893,24 @@ void init_context() {
   g_conf->set_val_or_die("rbd_cache_writethrough_until_flush", "false");
   g_conf->apply_changes(NULL);
   common_init_finish(g_ceph_context);
+}
+
+int init_rados(librados::Rados *rados) {
+  init_context();
+
+  int r = rados->init_with_context(g_ceph_context);
+  if (r < 0) {
+    std::cerr << "rbd: couldn't initialize rados!" << std::endl;
+    return r;
+  }
+
+  r = rados->connect();
+  if (r < 0) {
+    std::cerr << "rbd: couldn't connect to the cluster!" << std::endl;
+    return r;
+  }
+
+  return 0;
 }
 
 int init(const std::string &pool_name, librados::Rados *rados,
