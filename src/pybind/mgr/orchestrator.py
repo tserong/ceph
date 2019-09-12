@@ -26,17 +26,10 @@ from mgr_util import format_bytes
 try:
     from ceph.deployment.drive_group import DriveGroupSpec
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator, Callable, Any, Type
-
 except ImportError:
     pass
-    #T, G = object, object
 
-T = TypeVar('T')
-U = TypeVar('U')
-V = TypeVar('V')
-G = Generic[T]
-Promises = TypeVar('Promises', bound='_Promise')
-Completions = TypeVar('Completions', bound='Completion')
+logger = logging.getLogger(__name__)
 
 
 
@@ -133,7 +126,7 @@ def _no_result():
     return object()
 
 
-class _Promise(Generic[T]):
+class _Promise(object):
     """
     A completion may need multiple promises to be fulfilled. `_Promise` is one
     step.
@@ -150,12 +143,12 @@ class _Promise(Generic[T]):
     NO_RESULT = _no_result()  # type: None
 
     def __init__(self,
-                 _first_promise=None,  # type: Optional["_Promise[V]"]
-                 value=NO_RESULT,  # type: Optional[T]
-                 on_complete=None    # type: Optional[Callable[[T], Union[U, _Promise[U]]]]
+                 _first_promise=None,  # type: Optional["_Promise"]
+                 value=NO_RESULT,  # type: Optional
+                 on_complete=None    # type: Optional[Callable]
                  ):
         self._on_complete = on_complete
-        self._next_promise = None  # type: Optional[_Promise[U]]
+        self._next_promise = None  # type: Optional[_Promise]
 
         self._state = self.INITIALIZED
         self._exception = None  # type: Optional[Exception]
@@ -175,7 +168,7 @@ class _Promise(Generic[T]):
         )
 
     def then(self, on_complete):
-        # type: (Promises, Callable[[T], Union[U, _Promise[U]]]) -> Promises[U]
+        # type: (Any, Callable) -> Any
         """
         Call ``on_complete`` as soon as this promise is finalized.
         """
@@ -194,7 +187,7 @@ class _Promise(Generic[T]):
             return self._next_promise
 
     def _set_next_promise(self, next):
-        # type: (_Promise[U]) -> None
+        # type: (_Promise) -> None
         assert self is not next
         assert self._state is self.INITIALIZED
 
@@ -204,7 +197,6 @@ class _Promise(Generic[T]):
             p._first_promise = self._first_promise
 
     def finalize(self, value=NO_RESULT):
-        # type: (Optional[T]) -> None
         """
         Sets this promise to complete.
 
@@ -291,7 +283,7 @@ class ProgressReference(object):
     def __init__(self,
                  message,  # type: str
                  mgr,
-                 completion=None  # type: Optional[Callable[[], Completion[float]]]
+                 completion=None  # type: Optional[Callable[[], Completion]]
                 ):
         """
         ProgressReference can be used within Completions::
@@ -314,7 +306,7 @@ class ProgressReference(object):
         #: The completion can already have a result, before the write
         #: operation is effective. progress == 1 means, the services are
         #: created / removed.
-        self.completion = completion  # type: Optional[Callable[[], Completion[float]]]
+        self.completion = completion  # type: Optional[Callable[[], Completion]]
 
         #: if a orchestrator module can provide a more detailed
         #: progress information, it needs to also call ``progress.update()``.
@@ -373,7 +365,7 @@ class ProgressReference(object):
         self.progress = 1
 
 
-class Completion(_Promise[T]):
+class Completion(_Promise):
     """
     Combines multiple promises into one overall operation.
 
@@ -403,9 +395,9 @@ class Completion(_Promise[T]):
 
     """
     def __init__(self,
-                 _first_promise=None,  # type: Optional["Completion[V]"]
-                 value=_Promise.NO_RESULT,  # type: Optional[T]
-                 on_complete=None  # type: Optional[Callable[[T], Union[U, Completion[U]]]]
+                 _first_promise=None,  # type: Optional["Completion"]
+                 value=_Promise.NO_RESULT,  # type: Any
+                 on_complete=None  # type: Optional[Callable]
                  ):
         super(Completion, self).__init__(_first_promise, value, on_complete)
 
@@ -431,15 +423,15 @@ class Completion(_Promise[T]):
         return None
 
     @classmethod
-    def with_progress(cls,  # type: Completions[T]
+    def with_progress(cls,  # type: Any
                       message,  # type: str
                       mgr,
-                      _first_promise=None,  # type: Optional["Completions[V]"]
-                      value=_Promise.NO_RESULT,  # type: Optional[T]
-                      on_complete=None,  # type: Optional[Callable[[T], Union[U, Completions[U]]]]
-                      calc_percent=None  # type: Optional[Callable[[], Completions[float]]]
+                      _first_promise=None,  # type: Optional["Completions"]
+                      value=_Promise.NO_RESULT,  # type: Any
+                      on_complete=None,  # type: Optional[Callable]
+                      calc_percent=None  # type: Optional[Callable[[], Any]]
                       ):
-        # type: (...) -> Completions[T]
+        # type: (...) -> Any
 
         c = cls(
             _first_promise=_first_promise,
@@ -560,7 +552,7 @@ def raise_if_exception(c):
         raise e
 
 
-class TrivialReadCompletion(Completion[T]):
+class TrivialReadCompletion(Completion):
     """
     This is the trivial completion simply wrapping a result.
     """
@@ -705,7 +697,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def get_hosts(self):
-        # type: () -> Completion[List[InventoryNode]]
+        # type: () -> Completion
         """
         Report the hosts in the cluster.
 
@@ -716,7 +708,7 @@ class Orchestrator(object):
         return self.get_inventory()
 
     def get_inventory(self, node_filter=None, refresh=False):
-        # type: (InventoryFilter, bool) -> Completion[List[InventoryNode]]
+        # type: (InventoryFilter, bool) -> Completion
         """
         Returns something that was created by `ceph-volume inventory`.
 
@@ -725,7 +717,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
-        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion[List[ServiceDescription]]
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> Completion
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -901,7 +893,7 @@ class Orchestrator(object):
 
     @_hide_in_features
     def upgrade_status(self):
-        # type: () -> Completion[UpgradeStatusSpec]
+        # type: () -> Completion
         """
         If an upgrade is currently underway, report on where
         we are in the process, or if some error has occurred.
@@ -912,7 +904,7 @@ class Orchestrator(object):
 
     @_hide_in_features
     def upgrade_available(self):
-        # type: () -> Completion[List[str]]
+        # type: () -> Completion
         """
         Report on what versions are available to upgrade to
 
