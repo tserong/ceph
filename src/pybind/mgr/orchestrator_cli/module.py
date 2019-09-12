@@ -628,6 +628,15 @@ Usage:
 
         return HandleCommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
 
+    @_write_cli('orchestrator cancel',
+                desc='cancels ongoing operations')
+    def _cancel(self):
+        """
+        ProgressReferences might get stuck. Let's unstuck them.
+        """
+        self.cancel_completions()
+        return HandleCommandResult()
+
     @_read_cli('orchestrator status',
                desc='Report configured backend and its status')
     def _status(self):
