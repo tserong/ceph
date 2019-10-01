@@ -50,7 +50,7 @@ DEFAULT_SSH_CONFIG = ('Host *\n'
 class AsyncCompletion(orchestrator.Completion):
     def __init__(self, *args, **kwargs):
         self.__on_complete = None  # type: Callable
-        self.many = kwargs.pop('many')
+        self.many = kwargs.pop('many', False)
         super(AsyncCompletion, self).__init__(*args, **kwargs)
 
     def propagate_to_next(self):
