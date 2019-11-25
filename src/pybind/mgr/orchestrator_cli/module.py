@@ -673,3 +673,6 @@ Usage:
             assert False
         except orchestrator.OrchestratorError as e:
             assert e.args == ('hello', 'world')
+
+        c = orchestrator.TrivialReadCompletion(result=True)
+        assert c.has_result
