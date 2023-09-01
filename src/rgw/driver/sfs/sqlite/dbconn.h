@@ -319,7 +319,7 @@ class DBConn {
         );
       }
     };
-    storage.open_forever();
+    //storage.open_forever();
     storage.busy_timeout(5000);
     maybe_upgrade_metadata();
     check_metadata_is_compatible();
