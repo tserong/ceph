@@ -182,7 +182,7 @@ class TestSFSGC : public ::testing::Test {
   ) {
     SQLiteMultipart db_multiparts(conn);
     rgw::sal::sfs::sqlite::DBMultipartPart mp;
-    auto storage = conn->get_storage();
+    auto& storage = conn->get_storage();
     mp.upload_id = upload_id;
     mp.part_num = part_num;
     mp.size = 123;

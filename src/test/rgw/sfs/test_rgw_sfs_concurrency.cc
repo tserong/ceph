@@ -51,7 +51,7 @@ PerfHistogramCommon::axis_config_d perfcounter_exec_time_config{
 
 struct SFSConcurrencyFixture {
   CephContext* cct;
-  sqlite::Storage storage;
+  sqlite::Storage& storage;
   rgw::sal::SFStore* store;
   Bucket* predef_bucket;
   Object* predef_object;
@@ -192,7 +192,7 @@ class TestSFSConcurrency
     );
   }
 
-  sqlite::Storage storage() { return dbconn->get_storage(); }
+  sqlite::Storage& storage() { return dbconn->get_storage(); }
 };
 
 TEST_P(TestSFSConcurrency, parallel_executions_must_not_throw) {

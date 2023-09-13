@@ -330,7 +330,7 @@ TEST_F(TestSFSSQLiteUsers, UseStorage) {
 
   DBConnRef conn = std::make_shared<DBConn>(ceph_context.get());
   SQLiteUsers db_users(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBUser db_user;
   db_user.user_id = "test_storage";

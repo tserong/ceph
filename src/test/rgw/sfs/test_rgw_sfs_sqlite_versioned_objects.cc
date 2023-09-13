@@ -457,7 +457,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, CreateObjectForNonExistingBucket) {
   );
 
   SQLiteVersionedObjects db_objects(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBVersionedObject db_object;
 
@@ -749,7 +749,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, StoreUnsupportedTimestamp) {
   );
 
   SQLiteVersionedObjects db_versions(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBVersionedObject db_version;
 

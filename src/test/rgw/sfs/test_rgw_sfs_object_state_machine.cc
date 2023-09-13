@@ -84,7 +84,7 @@ class TestSFSObjectStateMachine : public ::testing::Test {
 
   fs::path getDBFullPath() const { return getDBFullPath(getTestDir()); }
   sqlite::DBConnRef dbconn() { return std::make_shared<sqlite::DBConn>(cct); }
-  sqlite::Storage storage() { return dbconn()->get_storage(); }
+  sqlite::Storage& storage() { return dbconn()->get_storage(); }
   ObjectState database_object_state(ObjectRef obj) {
     return storage()
         .select(

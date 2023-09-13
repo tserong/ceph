@@ -256,7 +256,7 @@ TEST_F(TestSFSSQLiteObjects, CreateObjectForNonExistingBucket) {
   createBucket("usertest", "test_bucket", conn);
 
   SQLiteObjects db_objects(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBObject db_object;
 

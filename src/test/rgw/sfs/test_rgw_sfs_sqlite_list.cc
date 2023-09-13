@@ -105,7 +105,7 @@ class TestSFSList : public ::testing::Test {
   }
 
   void dump_db() {
-    auto storage = dbconn->get_storage();
+    auto& storage = dbconn->get_storage();
     lderr(cct.get()) << "Dumping objects:" << dendl;
     for (const auto& row : storage.get_all<DBObject>()) {
       lderr(cct.get()) << row << dendl;

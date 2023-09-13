@@ -191,7 +191,7 @@ void createDBBucketBasic(
     const std::string& user, const std::string& name,
     const std::string& bucket_id, const std::shared_ptr<DBConn>& conn
 ) {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   DBBucket db_bucket;
   db_bucket.bucket_name = name;
   db_bucket.bucket_id = bucket_id;
@@ -203,7 +203,7 @@ void createDBBucketBasic(
 void deleteDBBucketBasic(
     const std::string& bucket_id, const std::shared_ptr<DBConn>& conn
 ) {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   auto bucket = storage.get_pointer<DBBucket>(bucket_id);
   ASSERT_TRUE(bucket != nullptr);
   bucket->deleted = true;
@@ -490,7 +490,7 @@ TEST_F(TestSFSSQLiteBuckets, UseStorage) {
   createUser("usertest", conn);
 
   SQLiteBuckets db_buckets(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBBucket db_bucket;
   db_bucket.bucket_name = "test_storage";
@@ -536,7 +536,7 @@ TEST_F(TestSFSSQLiteBuckets, CreateBucketForNonExistingUser) {
   createUser("usertest", conn);
 
   SQLiteBuckets db_buckets(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBBucket db_bucket;
   db_bucket.bucket_name = "test_storage";
@@ -568,7 +568,7 @@ TEST_F(TestSFSSQLiteBuckets, CreateBucketOwnerNotSet) {
   createUser("usertest", conn);
 
   SQLiteBuckets db_buckets(conn);
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
 
   DBBucket db_bucket;
   db_bucket.bucket_name = "test_storage";
