@@ -39,7 +39,7 @@ bool SQLiteList::objects(
 
   // ListBucket does not care about versions/instances. don't populate
   // key.instance
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   auto rows = storage.select(
       columns(
           &DBObject::name, &DBVersionedObject::mtime, &DBVersionedObject::etag,
@@ -103,7 +103,7 @@ bool SQLiteList::versions(
   ceph_assert(max < std::numeric_limits<size_t>::max());
   const size_t query_limit = max + 1;
 
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   auto rows = storage.select(
       columns(
           &DBObject::name, &DBVersionedObject::version_id,

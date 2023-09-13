@@ -400,7 +400,7 @@ http::status SFSStatusPage::render(std::ostream& os) {
      << " locked=" << ceph_mutex_is_locked(sfs->buckets_map_lock) << "</li>\n";
   os << "</ul>\n";
 
-  auto db = sfs->db_conn->get_storage();
+  auto& db = sfs->db_conn->get_storage();
   sqlite3* sqlite_db = sfs->db_conn->first_sqlite_conn;
 
   os << "<h2>SQLite</h2>\n"

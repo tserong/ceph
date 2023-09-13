@@ -23,14 +23,14 @@ SQLiteObjects::SQLiteObjects(DBConnRef _conn) : conn(_conn) {}
 
 std::vector<DBObject> SQLiteObjects::get_objects(const std::string& bucket_id
 ) const {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   return storage.get_all<DBObject>(
       where(is_equal(&DBObject::bucket_id, bucket_id))
   );
 }
 
 std::optional<DBObject> SQLiteObjects::get_object(const uuid_d& uuid) const {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   auto object = storage.get_pointer<DBObject>(uuid.to_string());
   std::optional<DBObject> ret_value;
   if (object) {
@@ -42,7 +42,7 @@ std::optional<DBObject> SQLiteObjects::get_object(const uuid_d& uuid) const {
 std::optional<DBObject> SQLiteObjects::get_object(
     const std::string& bucket_id, const std::string& object_name
 ) const {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   auto objects = storage.get_all<DBObject>(where(
       is_equal(&DBObject::bucket_id, bucket_id) and
       is_equal(&DBObject::name, object_name)
@@ -57,12 +57,12 @@ std::optional<DBObject> SQLiteObjects::get_object(
 }
 
 void SQLiteObjects::store_object(const DBObject& object) const {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   storage.replace(object);
 }
 
 void SQLiteObjects::remove_object(const uuid_d& uuid) const {
-  auto storage = conn->get_storage();
+  auto& storage = conn->get_storage();
   storage.remove<DBObject>(uuid);
 }
 
