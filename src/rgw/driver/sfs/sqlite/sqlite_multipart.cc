@@ -92,6 +92,7 @@ int SQLiteMultipart::abort_multiparts_by_bucket_id(const std::string& bucket_id
 ) const {
   auto& storage = conn->get_storage();
   uint64_t num_changes = 0;
+  std::lock_guard l(conn->lock);
   storage.transaction([&]() mutable {
     storage.update_all(
         set(c(&DBMultipart::state) = MultipartState::ABORTED,
@@ -222,7 +223,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
 ) const {
   auto& storage = conn->get_storage();
   std::optional<DBMultipartPart> entry = std::nullopt;
-
+  std::lock_guard l(conn->lock);
   storage.transaction([&]() mutable {
     auto cnt = storage.count<DBMultipart>(where(
         is_equal(&DBMultipart::upload_id, upload_id) and
@@ -299,6 +300,7 @@ bool SQLiteMultipart::finish_part(
     uint64_t bytes_written
 ) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   bool committed = storage.transaction([&]() mutable {
     storage.update_all(
         set(c(&DBMultipartPart::etag) = etag,
@@ -320,6 +322,7 @@ bool SQLiteMultipart::finish_part(
 
 bool SQLiteMultipart::abort(const std::string& upload_id) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto committed = storage.transaction([&]() mutable {
     storage.update_all(
         set(c(&DBMultipart::state) = MultipartState::ABORTED,
@@ -358,6 +361,7 @@ static int _mark_complete(
 
 bool SQLiteMultipart::mark_complete(const std::string& upload_id) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto committed = storage.transaction([&]() mutable {
     auto num_complete = _mark_complete(storage, upload_id);
     if (num_complete == 0) {
@@ -375,6 +379,7 @@ bool SQLiteMultipart::mark_complete(
 ) const {
   ceph_assert(duplicate != nullptr);
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto committed = storage.transaction([&]() mutable {
     auto entries = storage.get_all<DBMultipart>(
         where(is_equal(&DBMultipart::upload_id, upload_id))
@@ -401,6 +406,7 @@ bool SQLiteMultipart::mark_complete(
 
 bool SQLiteMultipart::mark_aggregating(const std::string& upload_id) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto committed = storage.transaction([&]() mutable {
     storage.update_all(
         set(c(&DBMultipart::state) = MultipartState::AGGREGATING,
@@ -423,6 +429,7 @@ bool SQLiteMultipart::mark_aggregating(const std::string& upload_id) const {
 
 bool SQLiteMultipart::mark_done(const std::string& upload_id) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto committed = storage.transaction([&]() mutable {
     storage.update_all(
         set(c(&DBMultipart::state) = MultipartState::DONE,
@@ -464,6 +471,7 @@ SQLiteMultipart::remove_multiparts_by_bucket_id_transact(
   DBDeletedMultipartItems ret_parts;
   auto& storage = conn->get_storage();
   RetrySQLite<DBDeletedMultipartItems> retry([&]() {
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     // get first the list of parts to be deleted up to max_items
     ret_parts = storage.select(
@@ -530,6 +538,7 @@ SQLiteMultipart::remove_done_or_aborted_multiparts_transact(uint max_items
   DBDeletedMultipartItems ret_parts;
   auto& storage = conn->get_storage();
   RetrySQLite<DBDeletedMultipartItems> retry([&]() {
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     // get first the list of parts to be deleted up to max_items
     ret_parts = storage.select(

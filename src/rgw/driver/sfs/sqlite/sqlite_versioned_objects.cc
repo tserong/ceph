@@ -119,6 +119,7 @@ bool SQLiteVersionedObjects::store_versioned_object_if_state(
     const DBVersionedObject& object, std::vector<ObjectState> allowed_states
 ) const {
   auto& storage = conn->get_storage();
+  std::lock_guard l(conn->lock);
   auto transaction = storage.transaction_guard();
   transaction.commit_on_destroy = true;
   storage.update_all(
@@ -148,6 +149,7 @@ bool SQLiteVersionedObjects::
     ) const {
   auto& storage = conn->get_storage();
   RetrySQLite<bool> retry([&]() {
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     storage.update_all(
         set(c(&DBVersionedObject::object_id) = object.object_id,
@@ -299,6 +301,7 @@ SQLiteVersionedObjects::delete_version_and_get_previous_transact(
 ) const {
   try {
     auto& storage = conn->get_storage();
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     std::optional<DBVersionedObject> ret_value = std::nullopt;
     storage.remove<DBVersionedObject>(id);
@@ -338,6 +341,7 @@ uint SQLiteVersionedObjects::add_delete_marker_transact(
   added = false;
   try {
     auto& storage = conn->get_storage();
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     auto last_version_select = storage.get_all<DBVersionedObject>(
         where(
@@ -452,6 +456,7 @@ SQLiteVersionedObjects::create_new_versioned_object_transact(
 ) const {
   auto& storage = conn->get_storage();
   RetrySQLite<DBVersionedObject> retry([&]() {
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     auto objs = storage.select(
         columns(&DBObject::uuid),
@@ -494,6 +499,7 @@ SQLiteVersionedObjects::remove_deleted_versions_transact(uint max_objects
   DBDeletedObjectItems ret_objs;
   auto& storage = conn->get_storage();
   RetrySQLite<DBDeletedObjectItems> retry([&]() {
+    std::lock_guard l(conn->lock);
     auto transaction = storage.transaction_guard();
     // get first the list of objects to be deleted up to max_objects
     // order by size so when we delete the versions data we are more efficient
