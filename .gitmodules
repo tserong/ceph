@@ -74,4 +74,4 @@
 	url = https://github.com/open-telemetry/opentelemetry-cpp.git
 [submodule "src/rgw/driver/sfs/sqlite/sqlite_orm"]
 	path = src/rgw/driver/sfs/sqlite/sqlite_orm
-	url = https://github.com/fnc12/sqlite_orm.git
+	url = https://github.com/aquarist-labs/sqlite_orm.git

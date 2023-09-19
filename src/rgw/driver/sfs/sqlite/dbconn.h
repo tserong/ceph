@@ -151,8 +151,8 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(VERSIONED_OBJECTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBVersionedObject::id, sqlite_orm::autoincrement(),
-              sqlite_orm::primary_key()
+              "id", &DBVersionedObject::id,
+              sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("object_id", &DBVersionedObject::object_id),
           sqlite_orm::make_column("checksum", &DBVersionedObject::checksum),
@@ -182,8 +182,7 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(ACCESS_KEYS),
           sqlite_orm::make_column(
-              "id", &DBAccessKey::id, sqlite_orm::autoincrement(),
-              sqlite_orm::primary_key()
+              "id", &DBAccessKey::id, sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("access_key", &DBAccessKey::access_key),
           sqlite_orm::make_column("user_id", &DBAccessKey::user_id),
@@ -211,8 +210,7 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(MULTIPARTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBMultipart::id, sqlite_orm::primary_key(),
-              sqlite_orm::autoincrement()
+              "id", &DBMultipart::id, sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("bucket_id", &DBMultipart::bucket_id),
           sqlite_orm::make_column("upload_id", &DBMultipart::upload_id),
@@ -236,8 +234,8 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(MULTIPARTS_PARTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBMultipartPart::id, sqlite_orm::primary_key(),
-              sqlite_orm::autoincrement()
+              "id", &DBMultipartPart::id,
+              sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("upload_id", &DBMultipartPart::upload_id),
           sqlite_orm::make_column("part_num", &DBMultipartPart::part_num),

@@ -54,11 +54,11 @@ bool SQLiteList::objects(
           greater_than(&DBObject::name, start_after_object_name) and
           prefix_to_like(&DBObject::name, prefix)
       ),
-      group_by(&DBVersionedObject::object_id),
-      having(is_equal(
-          sqlite_orm::max(&DBVersionedObject::version_type),
-          VersionType::REGULAR
-      )),
+      group_by(&DBVersionedObject::object_id)
+          .having(is_equal(
+              sqlite_orm::max(&DBVersionedObject::version_type),
+              VersionType::REGULAR
+          )),
       order_by(&DBObject::name), limit(query_limit)
   );
   ceph_assert(rows.size() <= static_cast<size_t>(query_limit));
