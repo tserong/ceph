@@ -60,6 +60,19 @@ int SFSGC::process() {
     );
     return 0;
   }
+
+  // process done or aborted multiparts
+  time_to_process_more = process_done_and_aborted_multiparts();
+  if (!time_to_process_more) {
+    perfcounter->set(
+        l_rgw_sfs_gc_process_exit,
+        static_cast<uint64_t>(
+            sfs_gc_process_exit_state::process_done_and_aborted_multiparts
+        )
+    );
+    return 0;
+  }
+
   // now delete possible pending multiparts data
   time_to_process_more = delete_pending_multiparts_data();
   if (!time_to_process_more) {
@@ -71,16 +84,7 @@ int SFSGC::process() {
     );
     return 0;
   }
-  // process deleted buckets
-  time_to_process_more = process_deleted_buckets();
-  if (!time_to_process_more) {
-    perfcounter->set(
-        l_rgw_sfs_gc_process_exit,
-        static_cast<uint64_t>(sfs_gc_process_exit_state::process_deleted_buckets
-        )
-    );
-    return 0;
-  }
+
   // process deleted objects
   time_to_process_more = process_deleted_objects();
   if (!time_to_process_more) {
@@ -92,8 +96,17 @@ int SFSGC::process() {
     return 0;
   }
 
-  // process done or aborted multiparts
-  time_to_process_more = process_done_and_aborted_multiparts();
+  // process deleted buckets
+  time_to_process_more = process_deleted_buckets();
+  if (!time_to_process_more) {
+    perfcounter->set(
+        l_rgw_sfs_gc_process_exit,
+        static_cast<uint64_t>(sfs_gc_process_exit_state::process_deleted_buckets
+        )
+    );
+    return 0;
+  }
+
   perfcounter->set(
       l_rgw_sfs_gc_process_exit,
       static_cast<uint64_t>(sfs_gc_process_exit_state::finished)

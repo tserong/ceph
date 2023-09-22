@@ -45,8 +45,8 @@ std::ostream& operator<<(std::ostream& os, sfs_gc_process_exit_state state) {
     case sfs_gc_process_exit_state::process_deleted_objects:
       os << "process_deleted_objects";
       break;
-    case sfs_gc_process_exit_state::finished:
-      os << "finished";
+    case sfs_gc_process_exit_state::process_done_and_aborted_multiparts:
+      os << "process_done_and_aborted_multiparts";
       break;
     default:
       os << "unknown";

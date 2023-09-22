@@ -92,6 +92,7 @@ enum class sfs_gc_process_exit_state : int {
   delete_pending_multiparts_data,
   process_deleted_buckets,
   process_deleted_objects,
+  process_done_and_aborted_multiparts,
   finished,
 };
 
