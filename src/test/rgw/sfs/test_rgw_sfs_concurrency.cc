@@ -66,7 +66,6 @@ class TestSFSConcurrency
   const fs::path database_directory;
 
   std::unique_ptr<rgw::sal::SFStore> store;
-  sqlite::DBConnRef dbconn;
   BucketRef bucket;
   ObjectRef predef_object;
   sqlite::DBVersionedObject predef_db_object;
@@ -81,16 +80,15 @@ class TestSFSConcurrency
   }
   void SetUp() override {
     ASSERT_TRUE(fs::exists(database_directory)) << database_directory;
-    dbconn = std::make_shared<sqlite::DBConn>(cct.get());
     store.reset(new rgw::sal::SFStore(cct.get(), database_directory));
 
-    sqlite::SQLiteUsers users(dbconn);
+    sqlite::SQLiteUsers users(store->db_conn);
     sqlite::DBOPUserInfo user;
     user.uinfo.user_id.id = "testuser";
     user.uinfo.display_name = "display_name";
     users.store_user(user);
 
-    sqlite::SQLiteBuckets db_buckets(dbconn);
+    sqlite::SQLiteBuckets db_buckets(store->db_conn);
     sqlite::DBOPBucketInfo db_binfo;
     db_binfo.binfo.bucket = rgw_bucket("", "testbucket", "1234");
     db_binfo.binfo.owner = rgw_user("testuser");
@@ -107,7 +105,7 @@ class TestSFSConcurrency
 
     predef_object = bucket->create_version(rgw_obj_key("predef_object"));
     predef_object->metadata_finish(store.get(), false);
-    sqlite::SQLiteVersionedObjects svos(dbconn);
+    sqlite::SQLiteVersionedObjects svos(store->db_conn);
     predef_db_object =
         svos.get_versioned_object(predef_object->version_id).value();
 
@@ -126,7 +124,6 @@ class TestSFSConcurrency
 
   void TearDown() override {
     store.reset();
-    dbconn.reset();
     fs::remove_all(database_directory);
   }
 
@@ -192,7 +189,7 @@ class TestSFSConcurrency
     );
   }
 
-  sqlite::Storage& storage() { return dbconn->get_storage(); }
+  sqlite::Storage& storage() { return store->db_conn->get_storage(); }
 };
 
 TEST_P(TestSFSConcurrency, parallel_executions_must_not_throw) {
