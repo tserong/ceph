@@ -142,7 +142,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
   RetrySQLiteBusy<DBDeletedObjectItems> retry([&]() {
     bucket_deleted = false;
     DBDeletedObjectItems ret_values;
-    storage.begin_transaction();
+    auto transaction = storage.transaction_guard();
     // first get all the objects and versions for that bucket
     ret_values = storage.select(
         columns(&DBObject::uuid, &DBVersionedObject::id),
@@ -179,7 +179,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
         throw(e);
       }
     }
-    storage.commit();
+    transaction.commit();
     return ret_values;
   });
   return retry.run();
