@@ -143,9 +143,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
     bucket_deleted = false;
     DBDeletedObjectItems ret_values;
     std::lock_guard l(conn->lock);
-    // FIXME: looks like this transaction will never rollback/commit if anything below throws.
-    // FIXME: I assume this wants to be storage.transaction_guard()?
-    storage.begin_transaction();
+    auto transaction = storage.transaction_guard();
     // first get all the objects and versions for that bucket
     ret_values = storage.select(
         columns(&DBObject::uuid, &DBVersionedObject::id),
@@ -182,7 +180,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
         throw(e);
       }
     }
-    storage.commit();
+    transaction.commit();
     return ret_values;
   });
   return retry.run();
