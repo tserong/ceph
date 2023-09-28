@@ -457,7 +457,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, CreateObjectForNonExistingBucket) {
   );
 
   SQLiteVersionedObjects db_objects(conn);
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
 
   DBVersionedObject db_object;
 
@@ -471,7 +471,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, CreateObjectForNonExistingBucket) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_object);
+          storage->replace(db_object);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(
@@ -749,7 +749,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, StoreUnsupportedTimestamp) {
   );
 
   SQLiteVersionedObjects db_versions(conn);
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
 
   DBVersionedObject db_version;
 
@@ -769,7 +769,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, StoreUnsupportedTimestamp) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_version);
+          storage->replace(db_version);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(

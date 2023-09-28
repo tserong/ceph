@@ -113,12 +113,12 @@ static int sqlite_profile_callback(
 }
 
 DBConn::DBConn(CephContext* _cct)
-    : storage(_make_storage(getDBPath(_cct))),
+    : storage(std::make_shared<StorageImpl>(_make_storage(getDBPath(_cct)))),
       first_sqlite_conn(nullptr),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
-  storage.on_open = [this](sqlite3* db) {
+  storage->on_open = [this](sqlite3* db) {
     if (first_sqlite_conn == nullptr) {
       first_sqlite_conn = db;
     }
@@ -149,11 +149,11 @@ DBConn::DBConn(CephContext* _cct)
       );
     }
   };
-  storage.open_forever();
-  storage.busy_timeout(5000);
+  storage->open_forever();
+  storage->busy_timeout(5000);
   maybe_upgrade_metadata();
   check_metadata_is_compatible();
-  storage.sync_schema();
+  storage->sync_schema();
 }
 
 void DBConn::check_metadata_is_compatible() const {
@@ -222,11 +222,9 @@ void DBConn::check_metadata_is_compatible() const {
   }
 }
 
-static int get_version(
-    CephContext* cct, rgw::sal::sfs::sqlite::Storage& storage
-) {
+static int get_version(CephContext* cct, StorageRef storage) {
   try {
-    return storage.pragma.user_version();
+    return storage->pragma.user_version();
   } catch (const std::system_error& e) {
     lsubdout(cct, rgw, -1) << "error opening db: " << e.code().message() << " ("
                            << e.code().value() << "), " << e.what() << dendl;
@@ -324,7 +322,7 @@ static int upgrade_metadata_from_v2(sqlite3* db, std::string* errmsg) {
 }
 
 static void upgrade_metadata(
-    CephContext* cct, rgw::sal::sfs::sqlite::Storage& storage, sqlite3* db
+    CephContext* cct, StorageRef storage, sqlite3* db
 ) {
   while (true) {
     int cur_version = get_version(cct, storage);
@@ -356,7 +354,7 @@ static void upgrade_metadata(
                cur_version + 1
            )
         << dendl;
-    storage.pragma.user_version(cur_version + 1);
+    storage->pragma.user_version(cur_version + 1);
   }
 }
 
@@ -366,7 +364,7 @@ void DBConn::maybe_upgrade_metadata() {
 
   if (db_version == 0) {
     // must have just been created, set version!
-    storage.pragma.user_version(SFS_METADATA_VERSION);
+    storage->pragma.user_version(SFS_METADATA_VERSION);
   } else if (db_version < SFS_METADATA_VERSION && db_version >= SFS_METADATA_MIN_VERSION) {
     // perform schema update
     upgrade_metadata(cct, storage, first_sqlite_conn);

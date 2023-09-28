@@ -40,8 +40,8 @@ std::vector<DBOPBucketInfo> get_rgw_buckets(
 std::optional<DBOPBucketInfo> SQLiteBuckets::get_bucket(
     const std::string& bucket_id
 ) const {
-  auto& storage = conn->get_storage();
-  auto bucket = storage.get_pointer<DBBucket>(bucket_id);
+  auto storage = conn->get_storage();
+  auto bucket = storage->get_pointer<DBBucket>(bucket_id);
   std::optional<DBOPBucketInfo> ret_value;
   if (bucket) {
     ret_value = get_rgw_bucket(*bucket);
@@ -52,8 +52,8 @@ std::optional<DBOPBucketInfo> SQLiteBuckets::get_bucket(
 std::optional<std::pair<std::string, std::string>> SQLiteBuckets::get_owner(
     const std::string& bucket_id
 ) const {
-  auto& storage = conn->get_storage();
-  const auto rows = storage.select(
+  auto storage = conn->get_storage();
+  const auto rows = storage->select(
       columns(&DBUser::user_id, &DBUser::display_name),
       inner_join<DBUser>(on(is_equal(&DBBucket::owner_id, &DBUser::user_id))),
       where(is_equal(&DBBucket::bucket_id, bucket_id))
@@ -68,61 +68,61 @@ std::optional<std::pair<std::string, std::string>> SQLiteBuckets::get_owner(
 std::vector<DBOPBucketInfo> SQLiteBuckets::get_bucket_by_name(
     const std::string& bucket_name
 ) const {
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
   return get_rgw_buckets(
-      storage.get_all<DBBucket>(where(c(&DBBucket::bucket_name) = bucket_name))
+      storage->get_all<DBBucket>(where(c(&DBBucket::bucket_name) = bucket_name))
   );
 }
 
 void SQLiteBuckets::store_bucket(const DBOPBucketInfo& bucket) const {
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
   auto db_bucket = get_db_bucket(bucket);
-  storage.replace(db_bucket);
+  storage->replace(db_bucket);
 }
 
 void SQLiteBuckets::remove_bucket(const std::string& bucket_name) const {
-  auto& storage = conn->get_storage();
-  storage.remove<DBBucket>(bucket_name);
+  auto storage = conn->get_storage();
+  storage->remove<DBBucket>(bucket_name);
 }
 
 std::vector<std::string> SQLiteBuckets::get_bucket_ids() const {
-  auto& storage = conn->get_storage();
-  return storage.select(&DBBucket::bucket_name);
+  auto storage = conn->get_storage();
+  return storage->select(&DBBucket::bucket_name);
 }
 
 std::vector<std::string> SQLiteBuckets::get_bucket_ids(
     const std::string& user_id
 ) const {
-  auto& storage = conn->get_storage();
-  return storage.select(
+  auto storage = conn->get_storage();
+  return storage->select(
       &DBBucket::bucket_name, where(c(&DBBucket::owner_id) = user_id)
   );
 }
 
 std::vector<DBOPBucketInfo> SQLiteBuckets::get_buckets() const {
-  auto& storage = conn->get_storage();
-  return get_rgw_buckets(storage.get_all<DBBucket>());
+  auto storage = conn->get_storage();
+  return get_rgw_buckets(storage->get_all<DBBucket>());
 }
 
 std::vector<DBOPBucketInfo> SQLiteBuckets::get_buckets(
     const std::string& user_id
 ) const {
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
   return get_rgw_buckets(
-      storage.get_all<DBBucket>(where(c(&DBBucket::owner_id) = user_id))
+      storage->get_all<DBBucket>(where(c(&DBBucket::owner_id) = user_id))
   );
 }
 
 std::vector<std::string> SQLiteBuckets::get_deleted_buckets_ids() const {
-  auto& storage = conn->get_storage();
-  return storage.select(
+  auto storage = conn->get_storage();
+  return storage->select(
       &DBBucket::bucket_id, where(c(&DBBucket::deleted) = true)
   );
 }
 
 bool SQLiteBuckets::bucket_empty(const std::string& bucket_id) const {
-  auto& storage = conn->get_storage();
-  auto num_ids = storage.count<DBVersionedObject>(
+  auto storage = conn->get_storage();
+  auto num_ids = storage->count<DBVersionedObject>(
       inner_join<DBObject>(
           on(is_equal(&DBObject::uuid, &DBVersionedObject::object_id))
       ),
@@ -138,14 +138,14 @@ bool SQLiteBuckets::bucket_empty(const std::string& bucket_id) const {
 std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
     const std::string& bucket_id, uint max_objects, bool& bucket_deleted
 ) const {
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
   RetrySQLite<DBDeletedObjectItems> retry([&]() {
     bucket_deleted = false;
     DBDeletedObjectItems ret_values;
     std::lock_guard l(conn->lock);
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     // first get all the objects and versions for that bucket
-    ret_values = storage.select(
+    ret_values = storage->select(
         columns(&DBObject::uuid, &DBVersionedObject::id),
         inner_join<DBObject>(
             on(is_equal(&DBObject::uuid, &DBVersionedObject::object_id))
@@ -155,14 +155,14 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
     );
     for (auto const& uuid_version : ret_values) {
       // remove the versions first
-      storage.remove<DBVersionedObject>(std::get<1>(uuid_version));
+      storage->remove<DBVersionedObject>(std::get<1>(uuid_version));
       // try to delete the object (it will throw an exception if it's not
       // empty yet)
       // possible errors when object is not empty are:
       // SQLITE_CONSTRAINT: legacy sqlite error
       // SQLITE_CONSTRAINT_FOREIGNKEY: extended sqlite error
       try {
-        storage.remove<DBObject>(std::get<0>(uuid_version));
+        storage->remove<DBObject>(std::get<0>(uuid_version));
       } catch (const std::system_error& e) {
         if (e.code().value() != SQLITE_CONSTRAINT_FOREIGNKEY &&
             e.code().value() != SQLITE_CONSTRAINT) {
@@ -172,7 +172,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
     }
     // try to delete the bucket
     try {
-      storage.remove<DBBucket>(bucket_id);
+      storage->remove<DBBucket>(bucket_id);
       bucket_deleted = true;
     } catch (const std::system_error& e) {
       if (e.code().value() != SQLITE_CONSTRAINT_FOREIGNKEY &&

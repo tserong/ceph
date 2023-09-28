@@ -84,10 +84,10 @@ class TestSFSObjectStateMachine : public ::testing::Test {
 
   fs::path getDBFullPath() const { return getDBFullPath(getTestDir()); }
   sqlite::DBConnRef dbconn() { return store->db_conn; }
-  sqlite::Storage& storage() { return dbconn()->get_storage(); }
+  sqlite::StorageRef storage() { return dbconn()->get_storage(); }
   ObjectState database_object_state(ObjectRef obj) {
     return storage()
-        .select(
+        ->select(
             &sqlite::DBVersionedObject::object_state,
             sqlite_orm::where(sqlite_orm::is_equal(
                 &sqlite::DBVersionedObject::id, obj->version_id
@@ -97,7 +97,7 @@ class TestSFSObjectStateMachine : public ::testing::Test {
   }
   VersionType database_version_type(ObjectRef obj) {
     return storage()
-        .select(
+        ->select(
             &sqlite::DBVersionedObject::version_type,
             sqlite_orm::where(sqlite_orm::is_equal(
                 &sqlite::DBVersionedObject::id, obj->version_id
@@ -107,7 +107,7 @@ class TestSFSObjectStateMachine : public ::testing::Test {
   }
   int database_number_of_versions(ObjectRef obj) {
     return storage()
-        .select(
+        ->select(
             sqlite_orm::count(),
             sqlite_orm::where(sqlite_orm::is_equal(
                 &sqlite::DBVersionedObject::object_id, obj->path.get_uuid()
@@ -116,7 +116,7 @@ class TestSFSObjectStateMachine : public ::testing::Test {
         .back();
   }
   auto database_get_versions_as_id_type_state(ObjectRef obj) {
-    return storage().select(
+    return storage()->select(
         sqlite_orm::columns(
             &sqlite::DBVersionedObject::version_id,
             &sqlite::DBVersionedObject::version_type,

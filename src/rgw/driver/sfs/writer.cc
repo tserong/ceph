@@ -198,7 +198,7 @@ void SFSAtomicWriter::cleanup() noexcept {
     lsfs_dout(dpp, -1)
         << fmt::format(
                "failed to remove failed upload version from database {}: {}",
-               store->db_conn->get_storage().filename(), e.what()
+               store->db_conn->get_storage()->filename(), e.what()
            )
         << dendl;
   }
@@ -226,7 +226,7 @@ int SFSAtomicWriter::prepare(optional_yield /*y*/) {
                "failed to create new object version in bucket {} db:{}. "
                "failing operation.",
                bucketref->get_bucket_id(),
-               store->db_conn->get_storage().filename()
+               store->db_conn->get_storage()->filename()
            )
         << dendl;
     return -ERR_INTERNAL_ERROR;

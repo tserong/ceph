@@ -256,7 +256,7 @@ TEST_F(TestSFSSQLiteObjects, CreateObjectForNonExistingBucket) {
   createBucket("usertest", "test_bucket", conn);
 
   SQLiteObjects db_objects(conn);
-  auto& storage = conn->get_storage();
+  auto storage = conn->get_storage();
 
   DBObject db_object;
 
@@ -268,7 +268,7 @@ TEST_F(TestSFSSQLiteObjects, CreateObjectForNonExistingBucket) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_object);
+          storage->replace(db_object);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(
