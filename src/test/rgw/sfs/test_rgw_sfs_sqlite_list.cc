@@ -104,11 +104,11 @@ class TestSFSList : public ::testing::Test {
   void dump_db() {
     auto storage = store->db_conn->get_storage();
     lderr(cct.get()) << "Dumping objects:" << dendl;
-    for (const auto& row : storage.get_all<DBObject>()) {
+    for (const auto& row : storage->get_all<DBObject>()) {
       lderr(cct.get()) << row << dendl;
     }
     lderr(cct.get()) << "Dumping versioned objects:" << dendl;
-    for (const auto& row : storage.get_all<DBVersionedObject>()) {
+    for (const auto& row : storage->get_all<DBVersionedObject>()) {
       lderr(cct.get()) << row << dendl;
     }
   }

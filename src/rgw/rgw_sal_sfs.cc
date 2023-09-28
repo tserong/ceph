@@ -409,9 +409,9 @@ http::status SFSStatusPage::render(std::ostream& os) {
 
   os << "<h2>SQLite</h2>\n"
      << "<ul>\n"
-     << "<li> filename: " << db.filename() << "</li>\n"
-     << "<li> libversion: " << db.libversion() << "</li>\n"
-     << "<li> total_changes: " << db.total_changes() << "</li>\n";
+     << "<li> filename: " << db->filename() << "</li>\n"
+     << "<li> libversion: " << db->libversion() << "</li>\n"
+     << "<li> total_changes: " << db->total_changes() << "</li>\n";
 
   int current;
   int highwater;
@@ -547,14 +547,14 @@ SFStore::custom_metric_fns() {
       [&]() {
         std::error_code ec;
         const auto size =
-            std::filesystem::file_size(db_conn->get_storage().filename(), ec);
+            std::filesystem::file_size(db_conn->get_storage()->filename(), ec);
         return std::make_tuple(
             perfcounter_type_d::PERFCOUNTER_U64, "sfs_sqlite_db_bytes",
             ec ? std::nan("error") : static_cast<double>(size)
         );
       },
       [&]() {
-        std::filesystem::path path(db_conn->get_storage().filename());
+        std::filesystem::path path(db_conn->get_storage()->filename());
         path.replace_extension("db-wal");
         std::error_code ec;
         const auto size = std::filesystem::file_size(path, ec);
@@ -581,7 +581,7 @@ SFStore::custom_metric_fns() {
             [&](const auto& dentry) {
               std::error_code ec;
               const auto target = std::filesystem::read_symlink(dentry, ec);
-              return !ec && (target == db_conn->get_storage().filename());
+              return !ec && (target == db_conn->get_storage()->filename());
             }
         );
         return std::make_tuple(
