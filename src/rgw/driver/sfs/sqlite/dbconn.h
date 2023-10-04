@@ -264,7 +264,8 @@ class DBConn {
   sqlite3* first_sqlite_conn;
   CephContext* const cct;
   const bool profile_enabled;
-  ceph::mutex lock = ceph::make_mutex("sfs_db_lock");
+  // This probably isn't actually needed with multiple connections
+  ceph::mutex sfs_db_lock = ceph::make_mutex("sfs_db_lock");
 
   DBConn(CephContext* _cct);
   virtual ~DBConn() = default;

@@ -142,7 +142,7 @@ std::optional<DBDeletedObjectItems> SQLiteBuckets::delete_bucket_transact(
   RetrySQLite<DBDeletedObjectItems> retry([&]() {
     bucket_deleted = false;
     DBDeletedObjectItems ret_values;
-    std::lock_guard l(conn->lock);
+    // std::lock_guard l(conn->sfs_db_lock);
     auto transaction = storage->transaction_guard();
     // first get all the objects and versions for that bucket
     ret_values = storage->select(
