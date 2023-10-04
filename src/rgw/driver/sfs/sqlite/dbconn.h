@@ -279,6 +279,10 @@ class DBConn {
         storage_pool.try_emplace(t, storage_pool.at(main_thread));
     StorageRef s = &(*i).second;
     if (was_inserted) {
+      // A copy of the main thread's StorageImpl won't have an open DB
+      // connection yet, so we'd better make it have one (otherwise we're
+      // back to a gadzillion sqlite3_open()/sqlite3_close() calls again)
+      s->open_forever();
       // FIXME: get rid of this (or reduce it to a debug log)
       lderr(cct) << "Added new Storage object " << s << " to pool for thread "
                  << std::hex << t << dendl;
