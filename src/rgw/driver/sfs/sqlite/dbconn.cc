@@ -113,7 +113,7 @@ static int sqlite_profile_callback(
 }
 
 DBConn::DBConn(CephContext* _cct)
-    : storage(std::make_shared<StorageImpl>(_make_storage(getDBPath(_cct)))),
+    : storage(_make_storage(getDBPath(_cct))),
       first_sqlite_conn(nullptr),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
