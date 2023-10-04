@@ -256,7 +256,9 @@ using StorageRef = StorageImpl*;
 
 class DBConn {
  private:
-  StorageImpl storage;
+  std::map<pthread_t, StorageImpl> storage_pool;
+  pthread_t main_thread;
+  ceph::mutex storage_pool_lock = ceph::make_mutex("sfs_storage_pool_lock");
 
  public:
   sqlite3* first_sqlite_conn;
@@ -270,7 +272,19 @@ class DBConn {
   DBConn(const DBConn&) = delete;
   DBConn& operator=(const DBConn&) = delete;
 
-  inline auto get_storage() { return &storage; }
+  inline StorageRef get_storage() {
+    std::lock_guard l(storage_pool_lock);  // TODO: is this necessary or not?
+    pthread_t t = pthread_self();
+    auto [i, was_inserted] =
+        storage_pool.try_emplace(t, storage_pool.at(main_thread));
+    StorageRef s = &(*i).second;
+    if (was_inserted) {
+      // FIXME: get rid of this (or reduce it to a debug log)
+      lderr(cct) << "Added new Storage object " << s << " to pool for thread "
+                 << std::hex << t << dendl;
+    }
+    return s;
+  }
 
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");

@@ -113,11 +113,13 @@ static int sqlite_profile_callback(
 }
 
 DBConn::DBConn(CephContext* _cct)
-    : storage(_make_storage(getDBPath(_cct))),
+    : main_thread(pthread_self()),
       first_sqlite_conn(nullptr),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
+  storage_pool.emplace(main_thread, _make_storage(getDBPath(cct)));
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
+  StorageRef storage = get_storage();
   storage->on_open = [this](sqlite3* db) {
     if (first_sqlite_conn == nullptr) {
       first_sqlite_conn = db;
@@ -359,6 +361,7 @@ static void upgrade_metadata(
 }
 
 void DBConn::maybe_upgrade_metadata() {
+  StorageRef storage = get_storage();
   int db_version = get_version(cct, storage);
   lsubdout(cct, rgw, 10) << "db user version: " << db_version << dendl;
 
