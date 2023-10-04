@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <ios>
 #include <memory>
+#include <shared_mutex>
 
 #include "buckets/bucket_definitions.h"
 #include "buckets/multipart_definitions.h"
@@ -251,12 +252,14 @@ inline auto _make_storage(const std::string& path) {
   );
 }
 
-using StorageImpl = decltype(_make_storage(""));
-using StorageRef = StorageImpl*;
+using Storage = decltype(_make_storage(""));
+using StorageRef = Storage*;
 
 class DBConn {
  private:
-  StorageImpl storage;
+  std::unordered_map<std::thread::id, Storage> storage_pool;
+  const std::thread::id main_thread;
+  mutable std::shared_mutex storage_pool_mutex;
 
  public:
   sqlite3* first_sqlite_conn;
@@ -269,7 +272,7 @@ class DBConn {
   DBConn(const DBConn&) = delete;
   DBConn& operator=(const DBConn&) = delete;
 
-  inline auto get_storage() { return &storage; }
+  StorageRef get_storage();
 
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");
