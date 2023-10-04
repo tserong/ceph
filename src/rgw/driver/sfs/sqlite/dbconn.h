@@ -284,9 +284,6 @@ class DBConn {
       // connection yet, so we'd better make it have one (otherwise we're
       // back to a gadzillion sqlite3_open()/sqlite3_close() calls again)
       s->open_forever();
-      // FIXME: get rid of this (or reduce it to a debug log)
-      lderr(cct) << "Added new Storage object " << s << " to pool for thread "
-                 << std::hex << t << dendl;
     }
     return s;
   }
