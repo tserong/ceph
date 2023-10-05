@@ -256,8 +256,8 @@ using StorageRef = StorageImpl*;
 
 class DBConn {
  private:
-  std::map<pthread_t, StorageImpl> storage_pool;
-  pthread_t main_thread;
+  std::map<std::thread::id, StorageImpl> storage_pool;
+  std::thread::id main_thread;
   ceph::mutex storage_pool_lock = ceph::make_mutex("sfs_storage_pool_lock");
 
  public:
@@ -275,7 +275,7 @@ class DBConn {
 
   inline StorageRef get_storage() {
     std::lock_guard l(storage_pool_lock);  // TODO: is this necessary or not?
-    pthread_t t = pthread_self();
+    std::thread::id t = std::this_thread::get_id();
     auto [i, was_inserted] =
         storage_pool.try_emplace(t, storage_pool.at(main_thread));
     StorageRef s = &(*i).second;
