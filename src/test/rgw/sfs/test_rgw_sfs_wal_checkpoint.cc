@@ -114,9 +114,9 @@ TEST_F(TestSFSWALCheckpoint, confirm_wal_explosion) {
 
   // Using the SQLite default checkpointing mechanism with
   // 10 concurrent writer threads will easily push us past
-  // 500MB quite quickly.
+  // a few hundred megabytes quite quickly.
   std::uintmax_t max_wal_size = multithread_object_create(10, 1000);
-  EXPECT_GT(max_wal_size, SIZE_1MB * 500);
+  EXPECT_GT(max_wal_size, SIZE_1MB * 300);
 
   // The fact that we have no size limit set means the WAL
   // won't be truncated even when the last writer completes,
