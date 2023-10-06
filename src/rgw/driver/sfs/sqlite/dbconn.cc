@@ -114,11 +114,14 @@ static int sqlite_profile_callback(
 
 DBConn::DBConn(CephContext* _cct)
     : main_thread(std::this_thread::get_id()),
+      storage_pool_mutex(),
       first_sqlite_conn(nullptr),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
-  storage_pool.emplace(main_thread, _make_storage(getDBPath(cct)));
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
+  // get_storage() relies on there already being an entry in the pool
+  // for the main thread (i.e. the thread that created the DBConn).
+  storage_pool.emplace(main_thread, _make_storage(getDBPath(cct)));
   StorageRef storage = get_storage();
   storage->on_open = [this](sqlite3* db) {
     if (first_sqlite_conn == nullptr) {
@@ -156,6 +159,27 @@ DBConn::DBConn(CephContext* _cct)
   maybe_upgrade_metadata();
   check_metadata_is_compatible();
   storage->sync_schema();
+}
+
+StorageRef DBConn::get_storage() {
+  std::thread::id thread = std::this_thread::get_id();
+  try {
+    std::shared_lock lock(storage_pool_mutex);
+    return &storage_pool.at(thread);
+  } catch (const std::out_of_range& ex) {
+    std::unique_lock lock(storage_pool_mutex);
+    auto [i, _] = storage_pool.emplace(thread, storage_pool.at(main_thread));
+    StorageRef s = &(*i).second;
+    // A copy of the main thread's Storage object won't have an open DB
+    // connection yet, so we'd better make it have one (otherwise we're
+    // back to a gadzillion sqlite3_open()/sqlite3_close() calls again)
+    s->open_forever();
+    s->busy_timeout(5000);
+    lsubdout(cct, rgw, 10) << "[SQLITE CONNECTION NEW] Added Storage " << s
+                           << " to pool for thread " << std::hex << thread
+                           << dendl;
+    return s;
+  }
 }
 
 void DBConn::check_metadata_is_compatible() const {

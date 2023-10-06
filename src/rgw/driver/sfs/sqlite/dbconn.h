@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <ios>
 #include <memory>
+#include <shared_mutex>
 
 #include "buckets/bucket_definitions.h"
 #include "buckets/multipart_definitions.h"
@@ -251,14 +252,14 @@ inline auto _make_storage(const std::string& path) {
   );
 }
 
-using StorageImpl = decltype(_make_storage(""));
-using StorageRef = StorageImpl*;
+using Storage = decltype(_make_storage(""));
+using StorageRef = Storage*;
 
 class DBConn {
  private:
-  std::map<std::thread::id, StorageImpl> storage_pool;
+  std::unordered_map<std::thread::id, Storage> storage_pool;
   std::thread::id main_thread;
-  ceph::mutex storage_pool_lock = ceph::make_mutex("sfs_storage_pool_lock");
+  mutable std::shared_mutex storage_pool_mutex;
 
  public:
   sqlite3* first_sqlite_conn;
@@ -273,20 +274,7 @@ class DBConn {
   DBConn(const DBConn&) = delete;
   DBConn& operator=(const DBConn&) = delete;
 
-  inline StorageRef get_storage() {
-    std::lock_guard l(storage_pool_lock);  // TODO: is this necessary or not?
-    std::thread::id t = std::this_thread::get_id();
-    auto [i, was_inserted] =
-        storage_pool.try_emplace(t, storage_pool.at(main_thread));
-    StorageRef s = &(*i).second;
-    if (was_inserted) {
-      // A copy of the main thread's StorageImpl won't have an open DB
-      // connection yet, so we'd better make it have one (otherwise we're
-      // back to a gadzillion sqlite3_open()/sqlite3_close() calls again)
-      s->open_forever();
-    }
-    return s;
-  }
+  StorageRef get_storage();
 
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");
