@@ -113,10 +113,12 @@ TEST_F(TestSFSWALCheckpoint, confirm_wal_explosion) {
   init_store();
 
   // Using the SQLite default checkpointing mechanism with
-  // 10 concurrent writer threads will easily push us past
-  // 500MB quite quickly.
-  std::uintmax_t max_wal_size = multithread_object_create(10, 1000);
-  EXPECT_GT(max_wal_size, SIZE_1MB * 500);
+  // multiple threads writing a couple thousand objects
+  // should easily push us past a few hundred megabytes
+  // quite quickly.
+  std::uintmax_t max_wal_size =
+      multithread_object_create(std::thread::hardware_concurrency(), 2000);
+  EXPECT_GT(max_wal_size, SIZE_1MB * 300);
 
   // The fact that we have no size limit set means the WAL
   // won't be truncated even when the last writer completes,
@@ -134,7 +136,8 @@ TEST_F(TestSFSWALCheckpoint, test_wal_checkpoint) {
   // don't always succeed, but it shouldn't go over by much.
   // We're allowing 32MB here for some extra wiggle room
   // just in case.
-  std::uintmax_t max_wal_size = multithread_object_create(10, 1000);
+  std::uintmax_t max_wal_size =
+      multithread_object_create(std::thread::hardware_concurrency(), 2000);
   EXPECT_LT(max_wal_size, SIZE_1MB * 32);
 
   // Once the writes are all done, the WAL should be finally
