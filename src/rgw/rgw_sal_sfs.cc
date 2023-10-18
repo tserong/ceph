@@ -405,7 +405,6 @@ http::status SFSStatusPage::render(std::ostream& os) {
   os << "</ul>\n";
 
   auto db = sfs->db_conn->get_storage();
-  sqlite3* sqlite_db = sfs->db_conn->first_sqlite_conn;
 
   os << "<h2>SQLite</h2>\n"
      << "<ul>\n"
@@ -417,25 +416,30 @@ http::status SFSStatusPage::render(std::ostream& os) {
   int highwater;
 
   // db stats
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_USED, &current, &highwater, false
-  );
-  os << "<li> cache_used: " << current << " bytes (high: " << highwater
-     << " bytes)</li>\n";
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_USED_SHARED, &current, &highwater, false
-  );
-  os << "<li> cache_used_shared: " << current << " bytes (high: " << highwater
-     << " bytes)</li>\n";
-
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_HIT, &current, &highwater, false
-  );
-  os << "<li> cache_hit: " << current << " (high: " << highwater << ")</li>\n";
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_MISS, &current, &highwater, false
-  );
-  os << "<li> cache_miss: " << current << " (high: " << highwater << ")</li>\n";
+  for (const auto conn : sfs->db_conn->all_sqlite_conns()) {
+    os << "<li> connection: " << conn << "<ul>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_USED, &current, &highwater, false
+    );
+    os << "<li> cache_used: " << current << " bytes (high: " << highwater
+       << " bytes)</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_USED_SHARED, &current, &highwater, false
+    );
+    os << "<li> cache_used_shared: " << current << " bytes (high: " << highwater
+       << " bytes)</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_HIT, &current, &highwater, false
+    );
+    os << "<li> cache_hit: " << current << " (high: " << highwater
+       << ")</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_MISS, &current, &highwater, false
+    );
+    os << "<li> cache_miss: " << current << " (high: " << highwater
+       << ")</li>\n";
+    os << "</ul></li>\n";
+  }
 
   // sqlite stats
   sqlite3_status(SQLITE_STATUS_MEMORY_USED, &current, &highwater, false);
