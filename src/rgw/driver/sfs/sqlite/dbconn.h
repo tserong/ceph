@@ -258,11 +258,11 @@ using StorageRef = Storage*;
 class DBConn {
  private:
   std::unordered_map<std::thread::id, Storage> storage_pool;
+  std::vector<sqlite3*> sqlite_conns;
   const std::thread::id main_thread;
   mutable std::shared_mutex storage_pool_mutex;
 
  public:
-  sqlite3* first_sqlite_conn;
   CephContext* const cct;
   const bool profile_enabled;
 
@@ -273,6 +273,14 @@ class DBConn {
   DBConn& operator=(const DBConn&) = delete;
 
   StorageRef get_storage();
+  sqlite3* first_sqlite_conn() const {
+    std::shared_lock lock(storage_pool_mutex);
+    return sqlite_conns[0];
+  }
+  std::vector<sqlite3*> all_sqlite_conns() const {
+    std::shared_lock lock(storage_pool_mutex);
+    return sqlite_conns;
+  }
 
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");

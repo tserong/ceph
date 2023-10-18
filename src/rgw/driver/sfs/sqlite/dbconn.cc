@@ -115,7 +115,6 @@ static int sqlite_profile_callback(
 DBConn::DBConn(CephContext* _cct)
     : main_thread(std::this_thread::get_id()),
       storage_pool_mutex(),
-      first_sqlite_conn(nullptr),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
@@ -124,9 +123,10 @@ DBConn::DBConn(CephContext* _cct)
   storage_pool.emplace(main_thread, _make_storage(getDBPath(cct)));
   StorageRef storage = get_storage();
   storage->on_open = [this](sqlite3* db) {
-    if (first_sqlite_conn == nullptr) {
-      first_sqlite_conn = db;
-    }
+    // This is safe because we're either in the main thread, or inside
+    // storage->on_open() called from get_storage(), which has the exclusive
+    // mutex.
+    sqlite_conns.emplace_back(db);
 
     sqlite3_extended_result_codes(db, 1);
     sqlite3_busy_timeout(db, 10000);
@@ -192,7 +192,7 @@ void DBConn::check_metadata_is_compatible() const {
   int rc = sqlite3_open(temporary_db_path.c_str(), &temporary_db);
   if (rc == SQLITE_OK) {
     sqlite3_backup* backup =
-        sqlite3_backup_init(temporary_db, "main", first_sqlite_conn, "main");
+        sqlite3_backup_init(temporary_db, "main", first_sqlite_conn(), "main");
     if (backup) {
       sqlite3_backup_step(backup, -1);
       sqlite3_backup_finish(backup);
@@ -395,7 +395,7 @@ void DBConn::maybe_upgrade_metadata() {
     storage->pragma.user_version(SFS_METADATA_VERSION);
   } else if (db_version < SFS_METADATA_VERSION && db_version >= SFS_METADATA_MIN_VERSION) {
     // perform schema update
-    upgrade_metadata(cct, storage, first_sqlite_conn);
+    upgrade_metadata(cct, storage, first_sqlite_conn());
   } else if (db_version < SFS_METADATA_MIN_VERSION) {
     throw sqlite_sync_exception(
         "Existing metadata too far behind! Unable to upgrade schema!"
