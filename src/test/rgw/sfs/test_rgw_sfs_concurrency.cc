@@ -102,7 +102,8 @@ class TestSFSConcurrency
     RGWUserInfo bucket_owner;
 
     bucket = std::make_shared<Bucket>(
-        cct.get(), store.get(), db_binfo.binfo, bucket_owner, db_binfo.battrs
+        cct.get(), store.get(), db_binfo.binfo, bucket_owner, db_binfo.battrs,
+        db_binfo.mtime
     );
 
     predef_object = bucket->create_version(rgw_obj_key("predef_object"));

@@ -47,6 +47,7 @@ namespace rgw::sal {
 SFSBucket::SFSBucket(SFStore* _store, sfs::BucketRef _bucket)
     : StoreBucket(_bucket->get_info()), store(_store), bucket(_bucket) {
   set_attrs(bucket->get_attrs());
+  mtime = _bucket->get_mtime();
 
   auto it = attrs.find(RGW_ATTR_ACL);
   if (it != attrs.end()) {
@@ -342,6 +343,7 @@ int SFSBucket::remove_bucket(
     return -ENOENT;
   }
   db_bucket->deleted = true;
+  db_bucket->mtime = ceph::real_time::clock::now();
   db_buckets.store_bucket(*db_bucket);
   store->_delete_bucket(get_name());
   return 0;
@@ -374,7 +376,7 @@ int SFSBucket::set_acl(
   attrs[RGW_ATTR_ACL] = aclp_bl;
 
   sfs::get_meta_buckets(get_store().db_conn)
-      ->store_bucket(sfs::sqlite::DBOPBucketInfo(get_info(), get_attrs()));
+      ->store_bucket(get_db_op_bucket_info());
 
   store->_refresh_buckets_safe();
   return 0;
@@ -425,7 +427,7 @@ int SFSBucket::merge_and_store_attrs(
   }
 
   sfs::get_meta_buckets(get_store().db_conn)
-      ->store_bucket(sfs::sqlite::DBOPBucketInfo(get_info(), get_attrs()));
+      ->store_bucket(get_db_op_bucket_info());
 
   store->_refresh_buckets_safe();
   return 0;
@@ -642,7 +644,7 @@ int SFSBucket::put_info(
   }
 
   sfs::get_meta_buckets(get_store().db_conn)
-      ->store_bucket(sfs::sqlite::DBOPBucketInfo(get_info(), get_attrs()));
+      ->store_bucket(get_db_op_bucket_info());
 
   store->_refresh_buckets_safe();
   return 0;

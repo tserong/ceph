@@ -55,7 +55,7 @@ struct DBBucket {
   std::optional<BLOB> bucket_attrs;
   std::optional<int> bucket_version;
   std::optional<std::string> bucket_version_tag;
-  std::optional<BLOB> mtime;
+  ceph::real_time mtime;
   bool deleted;
 };
 
@@ -64,6 +64,7 @@ struct DBOPBucketInfo {
   RGWBucketInfo binfo;
   Attrs battrs;
   bool deleted{false};
+  ceph::real_time mtime;
 
   DBOPBucketInfo() = default;
 

@@ -61,7 +61,8 @@ class TestSFSObjectStateMachine : public ::testing::Test {
     db_buckets.store_bucket(db_binfo);
 
     bucket = std::make_shared<Bucket>(
-        cct, store.get(), db_binfo.binfo, bucket_owner, db_binfo.battrs
+        cct, store.get(), db_binfo.binfo, bucket_owner, db_binfo.battrs,
+        db_binfo.mtime
     );
   }
 

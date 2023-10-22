@@ -136,6 +136,7 @@ class Bucket {
   RGWBucketInfo info;
   rgw::sal::Attrs attrs;
   bool deleted{false};
+  ceph::real_time mtime;
 
  public:
   ceph::mutex multipart_map_lock = ceph::make_mutex("multipart_map_lock");
@@ -168,13 +169,14 @@ class Bucket {
   Bucket(
       CephContext* _cct, rgw::sal::SFStore* _store,
       const RGWBucketInfo& _bucket_info, const RGWUserInfo& _owner,
-      const rgw::sal::Attrs& _attrs
+      const rgw::sal::Attrs& _attrs, ceph::real_time& _mtime
   )
       : cct(_cct),
         store(_store),
         owner(_owner),
         info(_bucket_info),
-        attrs(_attrs) {}
+        attrs(_attrs),
+        mtime(_mtime) {}
 
   const RGWBucketInfo& get_info() const { return info; }
 
@@ -202,7 +204,8 @@ class Bucket {
 
   uint32_t get_flags() const { return info.flags; }
 
- public:
+  ceph::real_time get_mtime() const { return mtime; }
+
   /// Create object version for key
   ObjectRef create_version(const rgw_obj_key& key) const;
 

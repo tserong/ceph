@@ -39,6 +39,7 @@ DBOPBucketInfo get_rgw_bucket(const DBBucket& bucket) {
   assign_optional_value(bucket.object_lock, rgw_bucket.binfo.obj_lock);
   assign_optional_value(bucket.bucket_attrs, rgw_bucket.battrs);
   rgw_bucket.deleted = bucket.deleted;
+  rgw_bucket.mtime = bucket.mtime;
 
   return rgw_bucket;
 }
@@ -63,6 +64,7 @@ DBBucket get_db_bucket(const DBOPBucketInfo& bucket) {
   assign_db_value(bucket.binfo.obj_lock, db_bucket.object_lock);
   assign_db_value(bucket.battrs, db_bucket.bucket_attrs);
   db_bucket.deleted = bucket.deleted;
+  db_bucket.mtime = bucket.mtime;
 
   return db_bucket;
 }

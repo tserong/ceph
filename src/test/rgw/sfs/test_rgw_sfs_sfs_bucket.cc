@@ -75,7 +75,7 @@ class TestSFSBucket : public ::testing::Test {
 
   void createTestBucket(
       const std::string& bucket_id, const std::string& user_id, DBConnRef conn,
-      bool versioned = false
+      bool versioned = false, ceph::real_time* mtime = nullptr
   ) {
     SQLiteBuckets db_buckets(conn);
     DBOPBucketInfo bucket;
@@ -83,6 +83,10 @@ class TestSFSBucket : public ::testing::Test {
     bucket.binfo.bucket.bucket_id = bucket_id;
     bucket.binfo.owner.id = user_id;
     bucket.deleted = false;
+    bucket.mtime = ceph::real_time::clock::now();
+    if (mtime != nullptr) {
+      *mtime = bucket.mtime;
+    }
     if (versioned) {
       bucket.binfo.flags |= BUCKET_VERSIONED;
     }
@@ -223,6 +227,8 @@ TEST_F(TestSFSBucket, UserCreateBucketCheckGotFromCreate) {
   }
 
   EXPECT_EQ(bucket_from_create->get_acl(), arg_aclp);
+  EXPECT_FALSE(real_clock::is_zero(bucket_from_create->get_modification_time())
+  );
 
   //@warning this triggers segfault
   //EXPECT_EQ(bucket_from_create->get_owner()->get_id().id, "usr_id");
@@ -307,6 +313,9 @@ TEST_F(TestSFSBucket, UserCreateBucketCheckGotFromStore) {
   }
 
   EXPECT_EQ(bucket_from_store->get_acl(), bucket_from_create->get_acl());
+  EXPECT_TRUE(
+      bucket_from_store->get_modification_time().time_since_epoch().count() > 0
+  );
 }
 
 TEST_F(TestSFSBucket, BucketSetAcl) {
@@ -364,6 +373,9 @@ TEST_F(TestSFSBucket, BucketSetAcl) {
       0
   );
 
+  ceph::real_time create_mtime = bucket_from_create->get_modification_time();
+  EXPECT_TRUE(create_mtime.time_since_epoch().count() > 0);
+
   std::unique_ptr<rgw::sal::Bucket> bucket_from_store;
 
   EXPECT_EQ(
@@ -372,6 +384,7 @@ TEST_F(TestSFSBucket, BucketSetAcl) {
       ),
       0
   );
+  EXPECT_EQ(bucket_from_store->get_modification_time(), create_mtime);
 
   RGWAccessControlPolicy arg_aclp_1 = get_aclp_1();
 
@@ -390,6 +403,7 @@ TEST_F(TestSFSBucket, BucketSetAcl) {
   );
 
   EXPECT_EQ(bucket_from_store->get_acl(), bucket_from_store_1->get_acl());
+  EXPECT_GT(bucket_from_store_1->get_modification_time(), create_mtime);
 }
 
 TEST_F(TestSFSBucket, BucketMergeAndStoreAttrs) {
@@ -447,6 +461,8 @@ TEST_F(TestSFSBucket, BucketMergeAndStoreAttrs) {
       0
   );
 
+  ceph::real_time create_mtime = bucket_from_create->get_modification_time();
+
   std::unique_ptr<rgw::sal::Bucket> bucket_from_store;
 
   EXPECT_EQ(
@@ -455,6 +471,8 @@ TEST_F(TestSFSBucket, BucketMergeAndStoreAttrs) {
       ),
       0
   );
+
+  EXPECT_EQ(bucket_from_store->get_modification_time(), create_mtime);
 
   rgw::sal::Attrs new_attrs;
   RGWAccessControlPolicy arg_aclp_1 = get_aclp_1();
@@ -483,6 +501,7 @@ TEST_F(TestSFSBucket, BucketMergeAndStoreAttrs) {
 
   EXPECT_EQ(bucket_from_store_1->get_attrs(), new_attrs);
   EXPECT_EQ(bucket_from_store->get_acl(), bucket_from_store_1->get_acl());
+  EXPECT_GT(bucket_from_store_1->get_modification_time(), create_mtime);
 }
 
 TEST_F(TestSFSBucket, DeleteBucket) {
@@ -540,6 +559,8 @@ TEST_F(TestSFSBucket, DeleteBucket) {
       0
   );
 
+  ceph::real_time create_mtime = bucket_from_create->get_modification_time();
+
   std::unique_ptr<rgw::sal::Bucket> bucket_from_store;
 
   EXPECT_EQ(
@@ -576,6 +597,10 @@ TEST_F(TestSFSBucket, DeleteBucket) {
   b_metadata = db_buckets->get_bucket(bucket_from_create->get_bucket_id());
   ASSERT_TRUE(b_metadata.has_value());
   EXPECT_TRUE(b_metadata->deleted);
+
+  // mtime should have been updated
+  ceph::real_time b_mtime = b_metadata->mtime;
+  EXPECT_GT(b_mtime, create_mtime);
 
   // now create the bucket again (should be ok, but bucket_id should differ)
   auto prev_bucket_id = bucket_from_create->get_bucket_id();
@@ -614,6 +639,9 @@ TEST_F(TestSFSBucket, DeleteBucket) {
   ASSERT_TRUE(b_metadata.has_value());
   EXPECT_FALSE(b_metadata->deleted);
 
+  // mtime of new bucket must be greater than last mtime, no reuse
+  EXPECT_GT(b_metadata->mtime, b_mtime);
+
   // if we query in metadata for buckets with the same name it should
   // return 2 entries.
   auto bucket_name = bucket_from_create->get_name();
@@ -636,8 +664,13 @@ TEST_F(TestSFSBucket, TestListObjectsAndVersions) {
   // create the test user
   createUser("test_user", store->db_conn);
 
+  // keep creation mtime
+  ceph::real_time create_mtime;
+
   // create test bucket
-  createTestBucket("test_bucket", "test_user", store->db_conn, true);
+  createTestBucket(
+      "test_bucket", "test_user", store->db_conn, true, &create_mtime
+  );
 
   // create a few objects in test_bucket with a few versions
   uint version_id = 1;
@@ -676,6 +709,9 @@ TEST_F(TestSFSBucket, TestListObjectsAndVersions) {
   );
 
   ASSERT_NE(bucket_from_store, nullptr);
+
+  // creating an object should not change the bucket's mtime
+  EXPECT_EQ(bucket_from_store->get_modification_time(), create_mtime);
 
   rgw::sal::Bucket::ListParams params;
 
