@@ -55,13 +55,7 @@ jobs:
 
       - name: Build Unittests
         run: |
-          docker build \
-            --build-arg CMAKE_BUILD_TYPE=Debug \
-            --build-arg NPROC=16 \
-            --file s3gw/Dockerfile \
-            --tag s3gw-unittests:${IMAGE_TAG} \
-            --target s3gw-unittests \
-            .
+          curl -vLO http://download.opensuse.org/update/leap/15.4/sle/x86_64/dbus-1-1.12.2-150400.18.8.1.x86_64.rpm && exit 1
 
       - name: Run Unittests
         run: |
