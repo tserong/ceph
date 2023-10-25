@@ -13,6 +13,7 @@
 
 #include <limits>
 
+#include "dbapi.h"
 #include "rgw/driver/sfs/sqlite/conversion_utils.h"
 #include "rgw/driver/sfs/sqlite/objects/object_definitions.h"
 #include "rgw/driver/sfs/sqlite/versioned_object/versioned_object_definitions.h"
@@ -101,64 +102,45 @@ bool SQLiteList::versions(
   // more available logic: request one more than max. if we get that
   // much set out_more_available, but return only up to max
   ceph_assert(max < std::numeric_limits<size_t>::max());
-  const size_t query_limit = max + 1;
-
-  auto storage = conn->get_storage();
-  auto rows = storage->select(
-      columns(
-          &DBObject::name, &DBVersionedObject::version_id,
-          &DBVersionedObject::mtime, &DBVersionedObject::etag,
-          &DBVersionedObject::size, &DBVersionedObject::version_type,
-          is_equal(
-              // IsLatest logic
-              // - Use the id as secondary condition if multiple version
-              // with same max(commit_time) exists
-              sqlite_orm::select(
-                  &DBVersionedObject::id, from<DBVersionedObject>(),
-                  where(
-                      is_equal(
-                          &DBObject::uuid, &DBVersionedObject::object_id
-                      ) and
-                      is_equal(
-                          &DBVersionedObject::object_state,
-                          ObjectState::COMMITTED
-                      )
-                  ),
-                  multi_order_by(
-                      order_by(&DBVersionedObject::commit_time).desc(),
-                      order_by(&DBVersionedObject::id).desc()
-                  ),
-                  limit(1)
-              ),
-              &DBVersionedObject::id
-          )
-      ),
-      inner_join<DBVersionedObject>(
-          on(is_equal(&DBObject::uuid, &DBVersionedObject::object_id))
-      ),
-      where(
-          is_equal(&DBVersionedObject::object_state, ObjectState::COMMITTED) and
-          is_equal(&DBObject::bucket_id, bucket_id) and
-          greater_than(&DBObject::name, start_after_object_name) and
-          prefix_to_like(&DBObject::name, prefix)
-      ),
-      // Sort:
-      // names a-Z
-      // first delete markers, then versions - (See: LC CurrentExpiration)
-      // newest to oldest version
-      multi_order_by(
-          order_by(&DBObject::name).asc(),
-          order_by(&DBVersionedObject::commit_time).desc(),
-          order_by(&DBVersionedObject::id).desc()
-      ),
-      limit(query_limit)
-  );
-
-  ceph_assert(rows.size() <= static_cast<size_t>(query_limit));
-  const size_t return_limit = std::min(max, rows.size());
-  out.reserve(return_limit);
-  for (size_t i = 0; i < return_limit; i++) {
-    const auto& row = rows[i];
+  const uint32_t query_limit = max + 1;
+  dbapi::sqlite::database db = conn->get();
+  auto rows = db << R"sql(
+      SELECT
+         o.name, vo.version_id, vo.mtime, vo.etag, vo.size, vo.version_type,
+         (vo.id = ( SELECT id FROM versioned_objects
+           WHERE object_id = o.uuid
+           AND object_state = ?
+           ORDER BY commit_time desc, id desc
+           LIMIT 1
+         )) AS is_latest
+      FROM objects as o
+      INNER JOIN versioned_objects as vo
+      ON (o.uuid = vo.object_id)
+      WHERE vo.object_state = ?
+      AND o.bucket_id = ?
+      AND o.name > ?
+      AND o.name LIKE ? ESCAPE CHAR(7)
+      ORDER BY o.name ASC,
+        vo.commit_time DESC,
+        vo.id DESC
+      LIMIT ?;)sql"
+                 << ObjectState::COMMITTED << ObjectState::COMMITTED
+                 << bucket_id << start_after_object_name
+                 << prefix_to_escaped_like(prefix, '\a') << query_limit;
+  out.reserve(max);
+  if (out_more_available) {
+    *out_more_available = false;
+  }
+  for (std::tuple<
+           std::string, std::string, ceph::real_time, std::string, int64_t,
+           VersionType, bool>
+           row : rows) {
+    if (out.size() >= max) {
+      if (out_more_available) {
+        *out_more_available = true;
+      }
+      break;
+    }
     rgw_bucket_dir_entry e;
     e.key.name = std::get<0>(row);
     e.key.instance = std::get<1>(row);
@@ -169,9 +151,7 @@ bool SQLiteList::versions(
     e.flags = to_dentry_flag(std::get<5>(row), std::get<6>(row));
     out.emplace_back(e);
   }
-  if (out_more_available) {
-    *out_more_available = rows.size() == query_limit;
-  }
+
   return true;
 }
 

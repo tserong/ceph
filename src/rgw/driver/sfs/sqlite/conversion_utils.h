@@ -128,22 +128,12 @@ void assign_db_value(const SOURCE& source, std::vector<char>& dest) {
   dest = blob_vector;
 }
 
+std::string prefix_to_escaped_like(const std::string& prefix, char escape);
+
 template <typename COL>
 sqlite_orm::internal::like_t<COL, std::basic_string<char>, const char*>
 prefix_to_like(COL col, const std::string& prefix) {
-  std::string like_expr;
-  like_expr.reserve(prefix.length() + 10);
-  for (const char c : prefix) {
-    switch (c) {
-      case '%':
-      case '_':
-        like_expr.push_back('\a');
-      default:
-        like_expr.push_back(c);
-    }
-  }
-  like_expr.push_back('%');
-  return sqlite_orm::like(col, like_expr, "\a");
+  return sqlite_orm::like(col, prefix_to_escaped_like(prefix, '\a'), "\a");
 }
 
 }  // namespace rgw::sal::sfs::sqlite
