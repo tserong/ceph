@@ -14,6 +14,8 @@
 #ifndef RGW_STORE_SFS_OBJECT_H
 #define RGW_STORE_SFS_OBJECT_H
 
+#pragma once
+
 #include <filesystem>
 
 #include "rgw/driver/sfs/bucket.h"

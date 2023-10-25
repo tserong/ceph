@@ -14,6 +14,8 @@
 #ifndef RGW_STORE_SFS_BUCKET_H
 #define RGW_STORE_SFS_BUCKET_H
 
+#pragma once
+
 #include <filesystem>
 #include <memory>
 #include <string>
