@@ -18,7 +18,7 @@
 #include "rgw_sal.h"
 #include "rgw_sal_sfs.h"
 
-#define sfs_dout_subsys ceph_subsys_rgw
+#define sfs_dout_subsys ceph_subsys_rgw_sfs
 
 namespace rgw::sal::sfs {
 

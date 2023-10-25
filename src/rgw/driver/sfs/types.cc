@@ -28,7 +28,8 @@
 #include "rgw_obj_types.h"
 #include "rgw_sal_sfs.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
+
 namespace rgw::sal::sfs {
 
 std::string generate_new_version_id(CephContext* ceph_context) {

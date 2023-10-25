@@ -37,7 +37,7 @@
 #include "rgw_common.h"
 #include "rgw_sal_sfs.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 using namespace sqlite_orm;

@@ -19,7 +19,7 @@
 
 #include "sqlite/sqlite_lifecycle.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 namespace rgw::sal::sfs {
 

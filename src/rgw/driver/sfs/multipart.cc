@@ -27,7 +27,7 @@
 #include "rgw_sal_sfs.h"
 #include "writer.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 

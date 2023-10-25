@@ -20,7 +20,7 @@
 
 #include "common/dout.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 namespace fs = std::filesystem;
 namespace orm = sqlite_orm;
