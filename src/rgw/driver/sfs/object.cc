@@ -17,6 +17,7 @@
 #include <fmt/format.h>
 
 #include "driver/sfs/multipart.h"
+#include "driver/sfs/sfs_log.h"
 #include "driver/sfs/sqlite/sqlite_versioned_objects.h"
 #include "driver/sfs/types.h"
 #include "rgw_common.h"
@@ -58,26 +59,26 @@ int SFSObject::SFSReadOp::handle_conditionals(const DoutPrefixProvider* dpp
   if (params.if_match) {
     const std::string match = rgw_string_unquote(params.if_match);
     result = (etag == match) ? 0 : -ERR_PRECONDITION_FAILED;
-    ldpp_dout(dpp, 10) << fmt::format(
-                              "If-Match: etag={} vs. ifmatch={}: {}", etag,
-                              match, result
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "If-Match: etag={} vs. ifmatch={}: {}", etag, match,
+                           result
+                       )
+                    << dendl;
   }
   if (params.if_nomatch) {
     const std::string match = rgw_string_unquote(params.if_nomatch);
     result = (etag == match) ? -ERR_NOT_MODIFIED : 0;
-    ldpp_dout(dpp, 10) << fmt::format(
-                              "If-None-Match: etag={} vs. ifmatch={}: {}", etag,
-                              match, result
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "If-None-Match: etag={} vs. ifmatch={}: {}", etag,
+                           match, result
+                       )
+                    << dendl;
   }
   // RFC 7232 3.3. A recipient MUST ignore If-Modified-Since if the
   // request contains an If-None-Match header field
   if (params.mod_ptr && !params.if_nomatch) {
     result = (mtime > *params.mod_ptr) ? 0 : -ERR_NOT_MODIFIED;
-    ldpp_dout(dpp, 10)
+    lsfs_debug(dpp)
         << fmt::format(
                "If-Modified-Since: mtime={:%Y-%m-%d %H:%M:%S} vs. "
                "if_time={:%Y-%m-%d %H:%M:%S}: {}",
@@ -90,7 +91,7 @@ int SFSObject::SFSReadOp::handle_conditionals(const DoutPrefixProvider* dpp
   // request contains an If-Match header field
   if (params.unmod_ptr && !params.if_match) {
     result = (mtime < *params.unmod_ptr) ? 0 : -ERR_PRECONDITION_FAILED;
-    ldpp_dout(dpp, 10)
+    lsfs_debug(dpp)
         << fmt::format(
                "If-UnModified-Since: mtime={:%Y-%m-%d %H:%M:%S} vs. "
                "if_time={:%Y-%m-%d %H:%M:%S}: {}",
@@ -100,7 +101,7 @@ int SFSObject::SFSReadOp::handle_conditionals(const DoutPrefixProvider* dpp
            )
         << dendl;
   }
-  ldpp_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "Conditional GET (Match/NoneMatch/Mod/UnMod) ({}, {}): {}",
              params.if_match != nullptr, params.if_nomatch != nullptr,
@@ -121,11 +122,11 @@ int SFSObject::SFSReadOp::prepare(
 
   objdata = source->store->get_data_path() / objref->get_storage_path();
   if (!std::filesystem::exists(objdata)) {
-    lsfs_dout(dpp, 10) << "object data not found at " << objdata << dendl;
+    lsfs_verb(dpp) << "object data not found at " << objdata << dendl;
     return -ENOENT;
   }
 
-  lsfs_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "bucket:{} obj:{} size:{} versionid:{} "
              "conditionals:(ifmatch:{} ifnomatch:{} ifmod:{} ifunmod:{})",
@@ -162,19 +163,18 @@ int SFSObject::SFSReadOp::read(
 ) {
   // TODO bounds check, etc.
   const auto len = end + 1 - ofs;
-  lsfs_dout(dpp, 10) << "bucket: " << source->bucket->get_name()
-                     << ", obj: " << source->get_name()
-                     << ", size: " << source->get_obj_size()
-                     << ", offset: " << ofs << ", end: " << end
-                     << ", len: " << len << dendl;
+  lsfs_debug(dpp) << "bucket: " << source->bucket->get_name()
+                  << ", obj: " << source->get_name()
+                  << ", size: " << source->get_obj_size() << ", offset: " << ofs
+                  << ", end: " << end << ", len: " << len << dendl;
 
   ceph_assert(std::filesystem::exists(objdata));
 
   std::string error;
   int ret = bl.pread_file(objdata.c_str(), ofs, len, &error);
   if (ret < 0) {
-    lsfs_dout(dpp, 10) << "failed to read object from file " << objdata
-                       << ". Returning EIO." << dendl;
+    lsfs_err(dpp) << "failed to read object from file " << objdata
+                  << ". Returning EIO." << dendl;
     return -EIO;
   }
   return len;
@@ -187,11 +187,10 @@ int SFSObject::SFSReadOp::iterate(
 ) {
   // TODO bounds check, etc.
   const auto len = end + 1 - ofs;
-  lsfs_dout(dpp, 10) << "bucket: " << source->bucket->get_name()
-                     << ", obj: " << source->get_name()
-                     << ", size: " << source->get_obj_size()
-                     << ", offset: " << ofs << ", end: " << end
-                     << ", len: " << len << dendl;
+  lsfs_debug(dpp) << "bucket: " << source->bucket->get_name()
+                  << ", obj: " << source->get_name()
+                  << ", size: " << source->get_obj_size() << ", offset: " << ofs
+                  << ", end: " << end << ", len: " << len << dendl;
 
   ceph_assert(std::filesystem::exists(objdata));
   std::string error;
@@ -203,17 +202,17 @@ int SFSObject::SFSReadOp::iterate(
     bufferlist bl;
     int ret = bl.pread_file(objdata.c_str(), ofs, size, &error);
     if (ret < 0) {
-      lsfs_dout(dpp, 0) << "failed to read object from file '" << objdata
-                        << ", offset: " << ofs << ", size: " << size << ": "
-                        << error << dendl;
+      lsfs_err(dpp) << "failed to read object from file '" << objdata
+                    << ", offset: " << ofs << ", size: " << size << ": "
+                    << error << dendl;
       return -EIO;
     }
     missing -= size;
-    lsfs_dout(dpp, 10) << "return " << size << "/" << len << ", offset: " << ofs
-                       << ", missing: " << missing << dendl;
+    lsfs_debug(dpp) << "return " << size << "/" << len << ", offset: " << ofs
+                    << ", missing: " << missing << dendl;
     ret = cb->handle_data(bl, 0, size);
     if (ret < 0) {
-      lsfs_dout(dpp, 0) << "failed to return object data: " << ret << dendl;
+      lsfs_warn(dpp) << "failed to return object data: " << ret << dendl;
       return -EIO;
     }
 
@@ -230,11 +229,11 @@ SFSObject::SFSDeleteOp::SFSDeleteOp(
 int SFSObject::SFSDeleteOp::delete_obj(
     const DoutPrefixProvider* dpp, optional_yield /*y*/
 ) {
-  lsfs_dout(dpp, 10) << "bucket: " << source->bucket->get_name()
-                     << " bucket versioning: "
-                     << source->bucket->versioning_enabled()
-                     << ", object: " << source->get_name()
-                     << ", instance: " << source->get_instance() << dendl;
+  lsfs_debug(dpp) << "bucket: " << source->bucket->get_name()
+                  << " bucket versioning: "
+                  << source->bucket->versioning_enabled()
+                  << ", object: " << source->get_name()
+                  << ", instance: " << source->get_instance() << dendl;
 
   // do the quick and dirty thing for now
   ceph_assert(bucketref);
@@ -275,7 +274,7 @@ int SFSObject::SFSDeleteOp::delete_obj(
 int SFSObject::delete_object(
     const DoutPrefixProvider* dpp, optional_yield y, bool prevent_versioning
 ) {
-  lsfs_dout(dpp, 10) << "prevent_versioning: " << prevent_versioning << dendl;
+  lsfs_debug(dpp) << "prevent_versioning: " << prevent_versioning << dendl;
   auto ref = store->get_bucket_ref(get_bucket()->get_name());
   SFSObject::SFSDeleteOp del(this, ref);
   return del.delete_obj(dpp, y);
@@ -296,14 +295,14 @@ int SFSObject::copy_object(
     ,
     const DoutPrefixProvider* dpp, optional_yield /*y*/
 ) {
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "bucket:{} obj:{} version:{} size:{} -> bucket:{} "
-                            "obj:{} version:{}",
-                            src_bucket->get_name(), get_name(), get_instance(),
-                            get_obj_size(), dst_bucket->get_name(),
-                            dst_object->get_name(), dst_object->get_instance()
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "bucket:{} obj:{} version:{} size:{} -> bucket:{} "
+                         "obj:{} version:{}",
+                         src_bucket->get_name(), get_name(), get_instance(),
+                         get_obj_size(), dst_bucket->get_name(),
+                         dst_object->get_name(), dst_object->get_instance()
+                     )
+                  << dendl;
 
   refresh_meta();
   ceph_assert(objref);
@@ -328,12 +327,11 @@ int SFSObject::copy_object(
 
   const int src_fd = ::open(srcpath.c_str(), O_RDONLY | O_BINARY);
   if (src_fd < 0) {
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "unable to open src obj {} file {} for reading: {}",
-               objref->name, srcpath.string(), cpp_strerror(errno)
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "unable to open src obj {} file {} for reading: {}",
+                         objref->name, srcpath.string(), cpp_strerror(errno)
+                     )
+                  << dendl;
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -348,12 +346,12 @@ int SFSObject::copy_object(
   std::error_code ec;
   std::filesystem::create_directories(dstpath.parent_path(), ec);
   if (ec) {
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "failed to create directory hierarchy {} for {}: {}",
-               dstpath.parent_path().string(), dstref->name, ec.message()
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed to create directory hierarchy {} for {}: {}",
+                         dstpath.parent_path().string(), dstref->name,
+                         ec.message()
+                     )
+                  << dendl;
     ::close(src_fd);
     return -ERR_INTERNAL_ERROR;
   }
@@ -362,51 +360,49 @@ int SFSObject::copy_object(
   const int dst_fd =
       ::open(dstpath.c_str(), O_WRONLY | O_CREAT | O_EXCL | O_BINARY, 0600);
   if (dst_fd < 0) {
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "unable to open dst obj {} file {} for writing: {}",
-               dstref->name, dstpath.string(), cpp_strerror(errno)
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "unable to open dst obj {} file {} for writing: {}",
+                         dstref->name, dstpath.string(), cpp_strerror(errno)
+                     )
+                  << dendl;
     ::close(src_fd);
     return -ERR_INTERNAL_ERROR;
   }
 
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "copying {} fd:{} -> {} fd:{}", srcpath.string(),
-                            src_fd, dstpath.string(), dst_fd
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "copying {} fd:{} -> {} fd:{}", srcpath.string(),
+                         src_fd, dstpath.string(), dst_fd
+                     )
+                  << dendl;
 
   int ret = ::copy_file_range(
       src_fd, nullptr, dst_fd, nullptr, objref->get_meta().size, 0
   );
   if (ret < 0) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed to copy file from {} to {}: {}",
-                              srcpath.string(), dstpath.string(),
-                              cpp_strerror(errno)
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed to copy file from {} to {}: {}",
+                         srcpath.string(), dstpath.string(), cpp_strerror(errno)
+                     )
+                  << dendl;
     ::close(src_fd);
     ::close(dst_fd);
     return -ERR_INTERNAL_ERROR;
   }
   ret = ::close(src_fd);
   if (ret < 0) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed closing src fd:{} fn:{}: {}", src_fd,
-                              srcpath.string(), cpp_strerror(ret)
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed closing src fd:{} fn:{}: {}", src_fd,
+                         srcpath.string(), cpp_strerror(ret)
+                     )
+                  << dendl;
   }
   ret = ::close(dst_fd);
   if (ret < 0) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed closing dst fd:{} fn:{}: {}", dst_fd,
-                              dstpath.string(), cpp_strerror(ret)
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed closing dst fd:{} fn:{}: {}", dst_fd,
+                         dstpath.string(), cpp_strerror(ret)
+                     )
+                  << dendl;
   }
 
   auto dest_meta = objref->get_meta();
@@ -496,7 +492,7 @@ int SFSObject::delete_obj_aio(
     const DoutPrefixProvider* dpp, RGWObjState* /*astate*/,
     Completions* /*aio*/, bool /*keep_index_consistent*/, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -543,7 +539,7 @@ int SFSObject::delete_obj_attrs(
 std::unique_ptr<MPSerializer> SFSObject::get_serializer(
     const DoutPrefixProvider* dpp, const std::string& lock_name
 ) {
-  lsfs_dout(dpp, 10) << "lock name: " << lock_name << dendl;
+  lsfs_debug(dpp) << "lock name: " << lock_name << dendl;
   return std::make_unique<sfs::SFSMultipartSerializer>();
 }
 
@@ -551,7 +547,7 @@ int SFSObject::transition(
     Bucket*, const rgw_placement_rule&, const real_time&, uint64_t,
     const DoutPrefixProvider* dpp, optional_yield
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -560,21 +556,21 @@ int SFSObject::transition_to_cloud(
     std::set<std::string>&, CephContext*, bool, const DoutPrefixProvider* dpp,
     optional_yield
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": not supported" << dendl;
+  lsfs_warn(dpp) << __func__ << ": not supported" << dendl;
   return -ENOTSUP;
 }
 
 bool SFSObject::placement_rules_match(
     rgw_placement_rule& /*r1*/, rgw_placement_rule& /*r2*/
 ) {
-  ldout(store->ceph_context(), 10) << __func__ << ": TODO" << dendl;
+  ldout(store->ceph_context(), SFS_LOG_WARN) << __func__ << ": TODO" << dendl;
   return true;
 }
 
 int SFSObject::dump_obj_layout(
     const DoutPrefixProvider* /*dpp*/, optional_yield /*y*/, Formatter* /*f*/
 ) {
-  ldout(store->ceph_context(), 10) << __func__ << ": TODO" << dendl;
+  ldout(store->ceph_context(), SFS_LOG_WARN) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -582,14 +578,14 @@ int SFSObject::swift_versioning_restore(
     bool& /*restored*/, /* out */
     const DoutPrefixProvider* dpp
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": do nothing." << dendl;
+  lsfs_warn(dpp) << __func__ << ": do nothing." << dendl;
   return 0;
 }
 
 int SFSObject::swift_versioning_copy(
     const DoutPrefixProvider* dpp, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": do nothing." << dendl;
+  lsfs_warn(dpp) << __func__ << ": do nothing." << dendl;
   return 0;
 }
 
@@ -598,7 +594,7 @@ int SFSObject::omap_get_vals(
     uint64_t /*count*/, std::map<std::string, bufferlist>* /*m*/,
     bool* /*pmore*/, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -606,7 +602,7 @@ int SFSObject::omap_get_all(
     const DoutPrefixProvider* dpp, std::map<std::string, bufferlist>* /*m*/,
     optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -614,7 +610,7 @@ int SFSObject::omap_get_vals_by_keys(
     const DoutPrefixProvider* dpp, const std::string& /*oid*/,
     const std::set<std::string>& /*keys*/, Attrs* /*vals*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -622,7 +618,7 @@ int SFSObject::omap_set_val_by_key(
     const DoutPrefixProvider* dpp, const std::string& /*key*/,
     bufferlist& /*val*/, bool /*must_exist*/, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -630,7 +626,7 @@ int SFSObject::chown(
     rgw::sal::User& /*new_user*/, const DoutPrefixProvider* dpp,
     optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -687,35 +683,35 @@ int SFSObject::handle_copy_object_conditionals(
   if (if_match) {
     const std::string match = rgw_string_unquote(if_match);
     result = (etag == match) ? 0 : -ERR_PRECONDITION_FAILED;
-    ldpp_dout(dpp, 10) << fmt::format(
-                              "If-Match: etag={} vs. ifmatch={}: {}", etag,
-                              match, result
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "If-Match: etag={} vs. ifmatch={}: {}", etag, match,
+                           result
+                       )
+                    << dendl;
   }
   if (if_nomatch) {
     const std::string match = rgw_string_unquote(if_nomatch);
     result = (etag == match) ? -ERR_PRECONDITION_FAILED : 0;
-    ldpp_dout(dpp, 1) << fmt::format(
-                             "If-None-Match: etag={} vs. ifmatch={}: {}", etag,
-                             match, result
-                         )
-                      << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "If-None-Match: etag={} vs. ifmatch={}: {}", etag,
+                           match, result
+                       )
+                    << dendl;
   }
   if (mod_ptr && !if_nomatch) {
     result = (mtime > *mod_ptr) ? 0 : -ERR_PRECONDITION_FAILED;
-    ldpp_dout(dpp, 10)
-        << fmt::format(
-               "If-Modified-Since: mtime={:%Y-%m-%d %H:%M:%S} vs. "
-               "if_time={:%Y-%m-%d %H:%M:%S}: {}",
-               fmt::gmtime(ceph::real_clock::to_time_t(mtime)),
-               fmt::gmtime(ceph::real_clock::to_time_t(*mod_ptr)), result
-           )
-        << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "If-Modified-Since: mtime={:%Y-%m-%d %H:%M:%S} vs. "
+                           "if_time={:%Y-%m-%d %H:%M:%S}: {}",
+                           fmt::gmtime(ceph::real_clock::to_time_t(mtime)),
+                           fmt::gmtime(ceph::real_clock::to_time_t(*mod_ptr)),
+                           result
+                       )
+                    << dendl;
   }
   if (unmod_ptr && !if_match) {
     result = (mtime < *unmod_ptr) ? 0 : -ERR_PRECONDITION_FAILED;
-    ldpp_dout(dpp, 10)
+    lsfs_debug(dpp)
         << fmt::format(
                "If-UnModified-Since: mtime={:%Y-%m-%d %H:%M:%S} vs. "
                "if_time={:%Y-%m-%d %H:%M:%S}: {}",
@@ -724,7 +720,7 @@ int SFSObject::handle_copy_object_conditionals(
            )
         << dendl;
   }
-  ldpp_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "Conditional COPY_OBJ (Match/NoneMatch/Mod/UnMod) ({}, {}): {}",
              if_match != nullptr, if_nomatch != nullptr, mod_ptr != nullptr,

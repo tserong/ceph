@@ -72,7 +72,7 @@ class SFSObject : public StoreObject {
         optional_yield y
     ) override;
 
-    const std::string get_cls_name() { return "object_read"; }
+    const std::string get_cls_name() const { return "object_read"; }
   };
 
   /**
@@ -251,7 +251,7 @@ class SFSObject : public StoreObject {
   // version" call.
   void refresh_meta(bool update_version_id_from_metadata = false);
 
-  const std::string get_cls_name() { return "object"; }
+  const std::string get_cls_name() const { return "object"; }
 
   int handle_copy_object_conditionals(
       const DoutPrefixProvider* dpp, const ceph::real_time* mod_ptr,

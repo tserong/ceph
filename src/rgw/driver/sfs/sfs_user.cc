@@ -11,6 +11,7 @@
  * License version 2.1, as published by the Free Software
  * Foundation. See file COPYING.
  */
+#include "rgw/driver/sfs/sfs_log.h"
 #include "rgw/driver/sfs/sqlite/sqlite_users.h"
 #include "rgw_sal_sfs.h"
 
@@ -33,7 +34,7 @@ int SFStore::get_user_by_access_key(
   if (db_user) {
     user->reset(new SFSUser(db_user->uinfo, this));
   } else {
-    ldpp_dout(dpp, 10) << __func__ << ": User not found" << dendl;
+    lsfs_debug(dpp) << __func__ << ": User not found" << dendl;
     err = -ENOENT;
   }
   return err;
@@ -49,7 +50,7 @@ int SFStore::get_user_by_email(
   if (db_user) {
     user->reset(new SFSUser(db_user->uinfo, this));
   } else {
-    ldpp_dout(dpp, 10) << __func__ << ": User not found" << dendl;
+    lsfs_debug(dpp) << __func__ << ": User not found" << dendl;
     err = -ENOENT;
   }
   return err;
@@ -59,7 +60,7 @@ int SFStore::get_user_by_swift(
     const DoutPrefixProvider* dpp, const std::string& /*user_str*/,
     optional_yield /*y*/, std::unique_ptr<User>* /*user*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 

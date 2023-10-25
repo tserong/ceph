@@ -16,6 +16,7 @@
 #include <filesystem>
 
 #include "driver/sfs/bucket.h"
+#include "rgw/driver/sfs/sfs_log.h"
 #include "rgw/driver/sfs/sqlite/sqlite_users.h"
 #include "rgw_sal_sfs.h"
 
@@ -32,7 +33,7 @@ int SFSUser::read_attrs(const DoutPrefixProvider* dpp, optional_yield y) {
 int SFSUser::merge_and_store_attrs(
     const DoutPrefixProvider* dpp, Attrs& /*new_attrs*/, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   /** Set the attributes in attrs, leaving any other existing attrs set, and
    * write them to the backing store; a merge operation */
   return -ENOTSUP;
@@ -44,7 +45,7 @@ int SFSUser::read_stats(
     ceph::real_time* /*last_stats_update*/
 ) {
   /** Read the User stats from the backing Store, synchronous */
-  ldpp_dout(dpp, 1) << __func__ << ": WARNING faked call" << dendl;
+  lsfs_warn(dpp) << __func__ << ": WARNING faked call" << dendl;
   return 0;
 }
 
@@ -52,7 +53,7 @@ int SFSUser::read_stats_async(
     const DoutPrefixProvider* dpp, RGWGetUserStats_CB* /*cb*/
 ) {
   /** Read the User stats from the backing Store, asynchronous */
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -60,7 +61,7 @@ int SFSUser::complete_flush_stats(
     const DoutPrefixProvider* dpp, optional_yield /*y*/
 ) {
   /** Flush accumulated stat changes for this User to the backing store */
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -71,7 +72,7 @@ int SFSUser::read_usage(
     std::map<rgw_user_bucket, rgw_usage_log_entry>& /*usage*/
 ) {
   /** Read detailed usage stats for this User from the backing store */
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -79,7 +80,7 @@ int SFSUser::trim_usage(
     const DoutPrefixProvider* dpp, uint64_t /*start_epoch*/,
     uint64_t /*end_epoch*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -107,8 +108,8 @@ int SFSUser::store_user(
       *old_info = db_user->uinfo;
     }
     if (db_user->user_version.ver != objv_tracker.read_version.ver) {
-      ldpp_dout(dpp, 0) << "User Read version mismatch err:(" << -ECANCELED
-                        << ") " << dendl;
+      lsfs_warn(dpp) << "User Read version mismatch err:(" << -ECANCELED << ") "
+                     << dendl;
       return -ECANCELED;
     }
   }
@@ -137,8 +138,8 @@ int SFSUser::list_buckets(
     const std::string& end_marker, uint64_t max, bool /*need_stats*/,
     BucketList& buckets, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": marker (" << marker << ", " << end_marker
-                     << "), max=" << max << dendl;
+  lsfs_debug(dpp) << __func__ << ": marker (" << marker << ", " << end_marker
+                  << "), max=" << max << dendl;
 
   std::list<sfs::BucketRef> lst = store->bucket_list();
   for (const auto& bucketref : lst) {
@@ -147,8 +148,7 @@ int SFSUser::list_buckets(
     }
   }
 
-  ldpp_dout(dpp, 10) << __func__ << ": buckets=" << buckets.get_buckets()
-                     << dendl;
+  lsfs_debug(dpp) << __func__ << ": buckets=" << buckets.get_buckets() << dendl;
   return 0;
 }
 
@@ -187,7 +187,7 @@ int SFSUser::create_bucket(
       pquota_info, new_attrs, new_info
   );
   if (!bucketref) {
-    lsfs_dout(dpp, 0) << "error creating bucket '" << b << "'" << dendl;
+    lsfs_warn(dpp) << "error creating bucket '" << b << "'" << dendl;
     return -EINVAL;
   }
 

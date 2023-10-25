@@ -19,6 +19,7 @@
 #include <system_error>
 
 #include "common/dout.h"
+#include "rgw/driver/sfs/sfs_log.h"
 
 #define dout_subsys ceph_subsys_rgw_sfs
 
@@ -61,11 +62,12 @@ static int sqlite_wal_hook_callback(
   int rc = sqlite3_wal_checkpoint_v2(
       db, zDb, mode, &total_frames, &checkpointed_frames
   );
-  ldout(cct, 10) << "[SQLITE] WAL checkpoint ("
-                 << (mode == SQLITE_CHECKPOINT_PASSIVE ? "passive" : "truncate")
-                 << ") returned " << rc << " (" << sqlite3_errstr(rc)
-                 << "), total_frames=" << total_frames
-                 << ", checkpointed_frames=" << checkpointed_frames << dendl;
+  ldout(cct, SFS_LOG_DEBUG)
+      << "[SQLITE] WAL checkpoint ("
+      << (mode == SQLITE_CHECKPOINT_PASSIVE ? "passive" : "truncate")
+      << ") returned " << rc << " (" << sqlite3_errstr(rc)
+      << "), total_frames=" << total_frames
+      << ", checkpointed_frames=" << checkpointed_frames << dendl;
   return SQLITE_OK;
 }
 
@@ -90,17 +92,19 @@ static int sqlite_profile_callback(
     const char* sql_str = sql ? sql.get() : sqlite3_sql(statement);
 
     if (runtime_ms > slowlog_time.count()) {
-      lsubdout(cct, rgw, 1) << fmt::format(
-                                   "[SQLITE SLOW QUERY] {} {:L}ms {}",
-                                   fmt::ptr(db), runtime_ms, sql_str
-                               )
-                            << dendl;
+      lsubdout(cct, rgw_sfs, SFS_LOG_INFO)
+          << fmt::format(
+                 "[SQLITE SLOW QUERY] {} {:L}ms {}", fmt::ptr(db), runtime_ms,
+                 sql_str
+             )
+          << dendl;
     }
-    lsubdout(cct, rgw, 20) << fmt::format(
-                                  "[SQLITE PROFILE] {} {:L}ms {}", fmt::ptr(db),
-                                  runtime_ms, sql_str
-                              )
-                           << dendl;
+    lsubdout(cct, rgw_sfs, SFS_LOG_TRACE)
+        << fmt::format(
+               "[SQLITE PROFILE] {} {:L}ms {}", fmt::ptr(db), runtime_ms,
+               sql_str
+           )
+        << dendl;
     perfcounter_prom_time_hist->hinc(
         l_rgw_prom_sfs_sqlite_profile, runtime_ns, 1
     );
@@ -228,8 +232,9 @@ static int get_version(
   try {
     return storage.pragma.user_version();
   } catch (const std::system_error& e) {
-    lsubdout(cct, rgw, -1) << "error opening db: " << e.code().message() << " ("
-                           << e.code().value() << "), " << e.what() << dendl;
+    lsubdout(cct, rgw_sfs, SFS_LOG_ERROR)
+        << "error opening db: " << e.code().message() << " ("
+        << e.code().value() << "), " << e.what() << dendl;
     throw e;
   }
 }
@@ -346,11 +351,11 @@ static void upgrade_metadata(
       auto err = fmt::format(
           "Error upgrading from version {}: {}", cur_version, errmsg
       );
-      lsubdout(cct, rgw, -1) << err << dendl;
+      lsubdout(cct, rgw_sfs, SFS_LOG_ERROR) << err << dendl;
       throw sqlite_sync_exception(err);
     }
 
-    lsubdout(cct, rgw, 1)
+    lsubdout(cct, rgw_sfs, SFS_LOG_INFO)
         << fmt::format(
                "upgraded metadata from version {} to version {}", cur_version,
                cur_version + 1
@@ -362,7 +367,8 @@ static void upgrade_metadata(
 
 void DBConn::maybe_upgrade_metadata() {
   int db_version = get_version(cct, storage);
-  lsubdout(cct, rgw, 10) << "db user version: " << db_version << dendl;
+  lsubdout(cct, rgw_sfs, SFS_LOG_INFO)
+      << "db user version: " << db_version << dendl;
 
   if (db_version == 0) {
     // must have just been created, set version!

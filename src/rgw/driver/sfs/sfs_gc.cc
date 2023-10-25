@@ -21,6 +21,7 @@
 #include "common/Clock.h"
 #include "driver/sfs/types.h"
 #include "multipart_types.h"
+#include "rgw/driver/sfs/sfs_log.h"
 #include "rgw/driver/sfs/sqlite/sqlite_multipart.h"
 #include "rgw/driver/sfs/sqlite/sqlite_objects.h"
 #include "rgw/rgw_perf_counters.h"
@@ -143,8 +144,8 @@ bool SFSGC::process_deleted_buckets() {
   // permanently delete removed buckets and their objects and versions
   sqlite::SQLiteBuckets db_buckets(store->db_conn);
   auto deleted_buckets = db_buckets.get_deleted_buckets_ids();
-  lsfs_dout(this, 10) << "deleted buckets found = " << deleted_buckets.size()
-                      << dendl;
+  lsfs_debug(this) << "deleted buckets found = " << deleted_buckets.size()
+                   << dendl;
   bool time_to_delete_more = true;
   for (auto const& bucket_id : deleted_buckets) {
     time_to_delete_more = abort_bucket_multiparts(bucket_id);
@@ -239,7 +240,7 @@ bool SFSGC::delete_pending_objects_data() {
       );
       it = (*pending_objects_to_delete).erase(it);
       if (process_time_elapsed()) {
-        lsfs_dout(this, 10) << "Exit due to max process time reached." << dendl;
+        lsfs_debug(this) << "Exit due to max process time reached." << dendl;
         return false;  // had no time to delete everything
       }
     }
@@ -266,7 +267,7 @@ bool SFSGC::delete_pending_multiparts_data() {
       it = (*pending_multiparts_to_delete).erase(it);
       // check that we didn't exceed the max before keep going
       if (process_time_elapsed()) {
-        lsfs_dout(this, 10) << "Exit due to max process time reached." << dendl;
+        lsfs_debug(this) << "Exit due to max process time reached." << dendl;
         return false;  // had no time to delete everything
       }
     }
@@ -284,7 +285,7 @@ bool SFSGC::abort_bucket_multiparts(const std::string& bucket_id) {
 
   // check that we didn't exceed the max before keep going
   if (process_time_elapsed()) {
-    lsfs_dout(this, 10) << "Exit due to max process time reached." << dendl;
+    lsfs_debug(this) << "Exit due to max process time reached." << dendl;
     return false;  // had no time to delete everything
   }
   return true;
@@ -328,18 +329,16 @@ SFSGC::GCWorker::GCWorker(
 void* SFSGC::GCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
-    lsfs_dout(dpp, 2) << "start" << dendl;
+    lsfs_startup(dpp) << "start" << dendl;
 
     if (!gc->suspended()) {
       common::PerfGuard elapsed(perfcounter, l_rgw_sfs_gc_processing_time);
       int r = gc->process();
       if (r < 0) {
-        lsfs_dout(
-            dpp, 0
-        ) << "ERROR: garbage collection process() returned error r="
-          << r << dendl;
+        lsfs_err(dpp) << "ERROR: garbage collection process() returned error r="
+                      << r << dendl;
       }
-      lsfs_dout(dpp, 2) << "stop" << dendl;
+      lsfs_shutdown(dpp) << "stop" << dendl;
     }
 
     if (gc->going_down()) break;
