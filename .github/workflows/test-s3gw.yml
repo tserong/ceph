@@ -36,7 +36,8 @@ jobs:
       - name: Checkout s3gw
         uses: actions/checkout@v3
         with:
-          repository: aquarist-labs/s3gw
+          repository: tserong/s3gw
+          ref: wip-base-bci-15.5
           path: s3gw
           submodules: false
 
