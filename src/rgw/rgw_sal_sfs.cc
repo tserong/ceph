@@ -405,37 +405,41 @@ http::status SFSStatusPage::render(std::ostream& os) {
   os << "</ul>\n";
 
   auto db = sfs->db_conn->get_storage();
-  sqlite3* sqlite_db = sfs->db_conn->first_sqlite_conn;
 
   os << "<h2>SQLite</h2>\n"
      << "<ul>\n"
-     << "<li> filename: " << db.filename() << "</li>\n"
-     << "<li> libversion: " << db.libversion() << "</li>\n"
-     << "<li> total_changes: " << db.total_changes() << "</li>\n";
+     << "<li> filename: " << db->filename() << "</li>\n"
+     << "<li> libversion: " << db->libversion() << "</li>\n"
+     << "<li> total_changes: " << db->total_changes() << "</li>\n";
 
   int current;
   int highwater;
 
   // db stats
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_USED, &current, &highwater, false
-  );
-  os << "<li> cache_used: " << current << " bytes (high: " << highwater
-     << " bytes)</li>\n";
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_USED_SHARED, &current, &highwater, false
-  );
-  os << "<li> cache_used_shared: " << current << " bytes (high: " << highwater
-     << " bytes)</li>\n";
-
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_HIT, &current, &highwater, false
-  );
-  os << "<li> cache_hit: " << current << " (high: " << highwater << ")</li>\n";
-  sqlite3_db_status(
-      sqlite_db, SQLITE_DBSTATUS_CACHE_MISS, &current, &highwater, false
-  );
-  os << "<li> cache_miss: " << current << " (high: " << highwater << ")</li>\n";
+  for (const auto conn : sfs->db_conn->all_sqlite_conns()) {
+    os << "<li> connection: " << conn << "<ul>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_USED, &current, &highwater, false
+    );
+    os << "<li> cache_used: " << current << " bytes (high: " << highwater
+       << " bytes)</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_USED_SHARED, &current, &highwater, false
+    );
+    os << "<li> cache_used_shared: " << current << " bytes (high: " << highwater
+       << " bytes)</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_HIT, &current, &highwater, false
+    );
+    os << "<li> cache_hit: " << current << " (high: " << highwater
+       << ")</li>\n";
+    sqlite3_db_status(
+        conn, SQLITE_DBSTATUS_CACHE_MISS, &current, &highwater, false
+    );
+    os << "<li> cache_miss: " << current << " (high: " << highwater
+       << ")</li>\n";
+    os << "</ul></li>\n";
+  }
 
   // sqlite stats
   sqlite3_status(SQLITE_STATUS_MEMORY_USED, &current, &highwater, false);
@@ -547,14 +551,14 @@ SFStore::custom_metric_fns() {
       [&]() {
         std::error_code ec;
         const auto size =
-            std::filesystem::file_size(db_conn->get_storage().filename(), ec);
+            std::filesystem::file_size(db_conn->get_storage()->filename(), ec);
         return std::make_tuple(
             perfcounter_type_d::PERFCOUNTER_U64, "sfs_sqlite_db_bytes",
             ec ? std::nan("error") : static_cast<double>(size)
         );
       },
       [&]() {
-        std::filesystem::path path(db_conn->get_storage().filename());
+        std::filesystem::path path(db_conn->get_storage()->filename());
         path.replace_extension("db-wal");
         std::error_code ec;
         const auto size = std::filesystem::file_size(path, ec);
@@ -581,7 +585,7 @@ SFStore::custom_metric_fns() {
             [&](const auto& dentry) {
               std::error_code ec;
               const auto target = std::filesystem::read_symlink(dentry, ec);
-              return !ec && (target == db_conn->get_storage().filename());
+              return !ec && (target == db_conn->get_storage()->filename());
             }
         );
         return std::make_tuple(

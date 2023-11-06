@@ -35,7 +35,7 @@ std::optional<DBVersionedObject> SQLiteVersionedObjects::get_versioned_object(
     uint id, bool filter_deleted
 ) const {
   auto storage = conn->get_storage();
-  auto object = storage.get_pointer<DBVersionedObject>(id);
+  auto object = storage->get_pointer<DBVersionedObject>(id);
   std::optional<DBVersionedObject> ret_value;
   if (object) {
     if (!filter_deleted || object->object_state != ObjectState::DELETED) {
@@ -49,7 +49,7 @@ std::optional<DBVersionedObject> SQLiteVersionedObjects::get_versioned_object(
     const std::string& version_id, bool filter_deleted
 ) const {
   auto storage = conn->get_storage();
-  auto versioned_objects = storage.get_all<DBVersionedObject>(
+  auto versioned_objects = storage->get_all<DBVersionedObject>(
       where(c(&DBVersionedObject::version_id) = version_id)
   );
   ceph_assert(versioned_objects.size() <= 1);
@@ -80,7 +80,7 @@ DBObjectsListItems SQLiteVersionedObjects::list_last_versioned_objects(
     const std::string& bucket_id
 ) const {
   auto storage = conn->get_storage();
-  auto results = storage.select(
+  auto results = storage->select(
       columns(
           &DBObject::uuid, &DBObject::name, &DBVersionedObject::version_id,
           max(&DBVersionedObject::commit_time), max(&DBVersionedObject::id),
@@ -105,23 +105,23 @@ uint SQLiteVersionedObjects::insert_versioned_object(
     const DBVersionedObject& object
 ) const {
   auto storage = conn->get_storage();
-  return storage.insert(object);
+  return storage->insert(object);
 }
 
 void SQLiteVersionedObjects::store_versioned_object(
     const DBVersionedObject& object
 ) const {
   auto storage = conn->get_storage();
-  storage.update(object);
+  storage->update(object);
 }
 
 bool SQLiteVersionedObjects::store_versioned_object_if_state(
     const DBVersionedObject& object, std::vector<ObjectState> allowed_states
 ) const {
   auto storage = conn->get_storage();
-  auto transaction = storage.transaction_guard();
+  auto transaction = storage->transaction_guard();
   transaction.commit_on_destroy = true;
-  storage.update_all(
+  storage->update_all(
       set(c(&DBVersionedObject::object_id) = object.object_id,
           c(&DBVersionedObject::checksum) = object.checksum,
           c(&DBVersionedObject::size) = object.size,
@@ -139,7 +139,7 @@ bool SQLiteVersionedObjects::store_versioned_object_if_state(
           in(&DBVersionedObject::object_state, allowed_states)
       )
   );
-  return storage.changes() > 0;
+  return storage->changes() > 0;
 }
 
 bool SQLiteVersionedObjects::
@@ -148,8 +148,8 @@ bool SQLiteVersionedObjects::
     ) const {
   auto storage = conn->get_storage();
   RetrySQLiteBusy<bool> retry([&]() {
-    auto transaction = storage.transaction_guard();
-    storage.update_all(
+    auto transaction = storage->transaction_guard();
+    storage->update_all(
         set(c(&DBVersionedObject::object_id) = object.object_id,
             c(&DBVersionedObject::checksum) = object.checksum,
             c(&DBVersionedObject::size) = object.size,
@@ -167,14 +167,14 @@ bool SQLiteVersionedObjects::
             in(&DBVersionedObject::object_state, allowed_states)
         )
     );
-    if (storage.changes() == 0) {
+    if (storage->changes() == 0) {
       transaction.rollback();
       return false;
     }
 
     // soft delete all other _COMMITTED_ versions. Leave OPEN versions
     // alone, as they may be an in progress write racing us.
-    storage.update_all(
+    storage->update_all(
         set(c(&DBVersionedObject::object_state) = ObjectState::DELETED),
         where(
             is_equal(&DBVersionedObject::object_id, object.object_id) and
@@ -193,7 +193,7 @@ bool SQLiteVersionedObjects::
 
 void SQLiteVersionedObjects::remove_versioned_object(uint id) const {
   auto storage = conn->get_storage();
-  storage.remove<DBVersionedObject>(id);
+  storage->remove<DBVersionedObject>(id);
 }
 
 std::vector<uint> SQLiteVersionedObjects::get_versioned_object_ids(
@@ -201,14 +201,14 @@ std::vector<uint> SQLiteVersionedObjects::get_versioned_object_ids(
 ) const {
   auto storage = conn->get_storage();
   if (filter_deleted) {
-    return storage.select(
+    return storage->select(
         &DBVersionedObject::id,
         where(
             is_not_equal(&DBVersionedObject::object_state, ObjectState::DELETED)
         )
     );
   }
-  return storage.select(&DBVersionedObject::id);
+  return storage->select(&DBVersionedObject::id);
 }
 
 std::vector<uint> SQLiteVersionedObjects::get_versioned_object_ids(
@@ -217,7 +217,7 @@ std::vector<uint> SQLiteVersionedObjects::get_versioned_object_ids(
   auto storage = conn->get_storage();
   auto uuid = object_id.to_string();
   if (filter_deleted) {
-    return storage.select(
+    return storage->select(
         &DBVersionedObject::id,
         where(
             is_equal(&DBVersionedObject::object_id, uuid) and
@@ -225,7 +225,7 @@ std::vector<uint> SQLiteVersionedObjects::get_versioned_object_ids(
         )
     );
   }
-  return storage.select(
+  return storage->select(
       &DBVersionedObject::id, where(c(&DBVersionedObject::object_id) = uuid)
   );
 }
@@ -236,7 +236,7 @@ std::vector<DBVersionedObject> SQLiteVersionedObjects::get_versioned_objects(
   auto storage = conn->get_storage();
   auto uuid = object_id.to_string();
   if (filter_deleted) {
-    return storage.get_all<DBVersionedObject>(
+    return storage->get_all<DBVersionedObject>(
         where(
             is_equal(&DBVersionedObject::object_id, uuid) and
             is_not_equal(&DBVersionedObject::object_state, ObjectState::DELETED)
@@ -244,7 +244,7 @@ std::vector<DBVersionedObject> SQLiteVersionedObjects::get_versioned_objects(
         order_by(&DBVersionedObject::commit_time).desc()
     );
   }
-  return storage.get_all<DBVersionedObject>(
+  return storage->get_all<DBVersionedObject>(
       where(c(&DBVersionedObject::object_id) = uuid)
   );
 }
@@ -259,7 +259,7 @@ SQLiteVersionedObjects::get_last_versioned_object(
   // we are looking for the ids that match the object_id with the highest
   // commit_time and we want to get the highest id.
   if (filter_deleted) {
-    max_commit_time_ids = storage.select(
+    max_commit_time_ids = storage->select(
         columns(&DBVersionedObject::id, max(&DBVersionedObject::commit_time)),
         where(
             is_equal(&DBVersionedObject::object_id, object_id) and
@@ -269,7 +269,7 @@ SQLiteVersionedObjects::get_last_versioned_object(
         order_by(&DBVersionedObject::id).desc()
     );
   } else {
-    max_commit_time_ids = storage.select(
+    max_commit_time_ids = storage->select(
         columns(&DBVersionedObject::id, max(&DBVersionedObject::commit_time)),
         where(is_equal(&DBVersionedObject::object_id, object_id)),
         group_by(&DBVersionedObject::id),
@@ -285,7 +285,8 @@ SQLiteVersionedObjects::get_last_versioned_object(
   std::optional<DBVersionedObject> ret_value;
   if (found_value) {
     auto last_version_id = std::get<0>(max_commit_time_ids[0]);
-    auto last_version = storage.get_pointer<DBVersionedObject>(last_version_id);
+    auto last_version =
+        storage->get_pointer<DBVersionedObject>(last_version_id);
     if (last_version) {
       ret_value = *last_version;
     }
@@ -299,12 +300,12 @@ SQLiteVersionedObjects::delete_version_and_get_previous_transact(
 ) const {
   try {
     auto storage = conn->get_storage();
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     std::optional<DBVersionedObject> ret_value = std::nullopt;
-    storage.remove<DBVersionedObject>(id);
-    if (storage.changes()) {
+    storage->remove<DBVersionedObject>(id);
+    if (storage->changes()) {
       // get the last version of the object now
-      auto last_version_select = storage.get_all<DBVersionedObject>(
+      auto last_version_select = storage->get_all<DBVersionedObject>(
           where(
               is_equal(&DBVersionedObject::object_id, object_id) and
               is_not_equal(
@@ -337,8 +338,8 @@ uint SQLiteVersionedObjects::add_delete_marker_transact(
   added = false;
   try {
     auto storage = conn->get_storage();
-    auto transaction = storage.transaction_guard();
-    auto last_version_select = storage.get_all<DBVersionedObject>(
+    auto transaction = storage->transaction_guard();
+    auto last_version_select = storage->get_all<DBVersionedObject>(
         where(
             is_equal(&DBVersionedObject::object_id, object_id) and
             is_not_equal(&DBVersionedObject::object_state, ObjectState::DELETED)
@@ -362,7 +363,7 @@ uint SQLiteVersionedObjects::add_delete_marker_transact(
         last_version.delete_time = now;
         last_version.mtime = now;
         last_version.version_id = delete_marker_id;
-        ret_id = storage.insert(last_version);
+        ret_id = storage->insert(last_version);
         added = true;
         // only commit if the delete maker was indeed inserted.
         // the rest of calls in this transaction are read operations
@@ -383,7 +384,7 @@ SQLiteVersionedObjects::get_committed_versioned_object_specific_version(
     const std::string& version_id
 ) const {
   auto storage = conn->get_storage();
-  auto ids = storage.select(
+  auto ids = storage->select(
       &DBVersionedObject::id,
       inner_join<DBObject>(
           on(is_equal(&DBObject::uuid, &DBVersionedObject::object_id))
@@ -401,7 +402,7 @@ SQLiteVersionedObjects::get_committed_versioned_object_specific_version(
   ceph_assert(ids.size() <= 1);
   std::optional<DBVersionedObject> ret_value;
   if (ids.size() > 0) {
-    auto version = storage.get_pointer<DBVersionedObject>(ids[0]);
+    auto version = storage->get_pointer<DBVersionedObject>(ids[0]);
     if (version != nullptr) {
       ret_value = *version;
     }
@@ -417,7 +418,7 @@ SQLiteVersionedObjects::get_committed_versioned_object_last_version(
   // committed
   auto storage = conn->get_storage();
   std::optional<DBVersionedObject> ret_value = std::nullopt;
-  auto last_version_id = storage.select(
+  auto last_version_id = storage->select(
       &DBVersionedObject::id,
       inner_join<DBObject>(
           on(is_equal(&DBObject::uuid, &DBVersionedObject::object_id))
@@ -435,7 +436,7 @@ SQLiteVersionedObjects::get_committed_versioned_object_last_version(
   );
   if (!last_version_id.empty()) {
     auto last_version =
-        storage.get_pointer<DBVersionedObject>(last_version_id[0]);
+        storage->get_pointer<DBVersionedObject>(last_version_id[0]);
     if (last_version) {
       ret_value = *last_version;
     }
@@ -450,8 +451,8 @@ SQLiteVersionedObjects::create_new_versioned_object_transact(
 ) const {
   auto storage = conn->get_storage();
   RetrySQLiteBusy<DBVersionedObject> retry([&]() {
-    auto transaction = storage.transaction_guard();
-    auto objs = storage.select(
+    auto transaction = storage->transaction_guard();
+    auto objs = storage->select(
         columns(&DBObject::uuid),
         where(
             is_equal(&DBObject::bucket_id, bucket_id) and
@@ -468,7 +469,7 @@ SQLiteVersionedObjects::create_new_versioned_object_transact(
       // object does not exist
       // create it
       obj.uuid.generate_random();
-      storage.replace(obj);
+      storage->replace(obj);
     } else {
       obj.uuid = std::get<0>(objs[0]);
     }
@@ -479,7 +480,7 @@ SQLiteVersionedObjects::create_new_versioned_object_transact(
     version.version_type = VersionType::REGULAR;
     version.version_id = version_id;
     version.create_time = ceph::real_clock::now();
-    version.id = storage.insert(version);
+    version.id = storage->insert(version);
     transaction.commit();
     return version;
   });
@@ -492,10 +493,10 @@ SQLiteVersionedObjects::remove_deleted_versions_transact(uint max_objects
   DBDeletedObjectItems ret_objs;
   auto storage = conn->get_storage();
   RetrySQLiteBusy<DBDeletedObjectItems> retry([&]() {
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     // get first the list of objects to be deleted up to max_objects
     // order by size so when we delete the versions data we are more efficient
-    ret_objs = storage.select(
+    ret_objs = storage->select(
         columns(&DBVersionedObject::object_id, &DBVersionedObject::id),
         where(is_equal(&DBVersionedObject::object_state, ObjectState::DELETED)),
         order_by(&DBVersionedObject::size).desc(), limit(max_objects)
@@ -506,13 +507,13 @@ SQLiteVersionedObjects::remove_deleted_versions_transact(uint max_objects
       return ret_objs;
     }
     // remove all deleted versions up to max_objects
-    storage.remove_all<DBVersionedObject>(
+    storage->remove_all<DBVersionedObject>(
         where(is_equal(&DBVersionedObject::object_state, ObjectState::DELETED)),
         order_by(&DBVersionedObject::size).desc(), limit(max_objects)
     );
     // now check if the object is empty
     for (auto const& obj : ret_objs) {
-      auto nb_versions = storage.count(
+      auto nb_versions = storage->count(
           &DBVersionedObject::id,
           where(
               is_equal(
@@ -523,13 +524,13 @@ SQLiteVersionedObjects::remove_deleted_versions_transact(uint max_objects
       );
       if (nb_versions == 0) {
         // delete possible delete marker first
-        storage.remove_all<DBVersionedObject>(where(
+        storage->remove_all<DBVersionedObject>(where(
             is_equal(
                 &DBVersionedObject::version_type, VersionType::DELETE_MARKER
             ) and
             is_equal(&DBVersionedObject::object_id, std::get<0>(obj))
         ));
-        storage.remove<DBObject>(std::get<0>(obj));
+        storage->remove<DBObject>(std::get<0>(obj));
       }
     }
     transaction.commit();
@@ -542,15 +543,15 @@ int SQLiteVersionedObjects::set_all_open_versions_to_deleted() const {
   // This function is only for use when we want to deliberately garbage
   // collect open versions on startup.
   auto storage = conn->get_storage();
-  auto transaction = storage.transaction_guard();
+  auto transaction = storage->transaction_guard();
   transaction.commit_on_destroy = true;
   auto now = ceph::real_clock::now();
-  storage.update_all(
+  storage->update_all(
       set(c(&DBVersionedObject::delete_time) = now,
           c(&DBVersionedObject::object_state) = ObjectState::DELETED),
       where(is_equal(&DBVersionedObject::object_state, ObjectState::OPEN))
   );
-  return storage.changes();
+  return storage->changes();
 }
 
 }  // namespace rgw::sal::sfs::sqlite

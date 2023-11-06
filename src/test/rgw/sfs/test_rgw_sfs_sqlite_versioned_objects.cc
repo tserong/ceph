@@ -471,7 +471,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, CreateObjectForNonExistingBucket) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_object);
+          storage->replace(db_object);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(
@@ -769,7 +769,7 @@ TEST_F(TestSFSSQLiteVersionedObjects, StoreUnsupportedTimestamp) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_version);
+          storage->replace(db_version);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(

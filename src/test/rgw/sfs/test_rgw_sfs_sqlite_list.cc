@@ -40,7 +40,6 @@ class TestSFSList : public ::testing::Test {
   const fs::path database_directory;
 
   std::unique_ptr<rgw::sal::SFStore> store;
-  DBConnRef dbconn;
 
   TestSFSList()
       : cct(new CephContext(CEPH_ENTITY_TYPE_ANY)),
@@ -52,16 +51,15 @@ class TestSFSList : public ::testing::Test {
   }
   void SetUp() override {
     ASSERT_TRUE(fs::exists(database_directory)) << database_directory;
-    dbconn = std::make_shared<DBConn>(cct.get());
     store.reset(new rgw::sal::SFStore(cct.get(), database_directory));
 
-    SQLiteUsers users(dbconn);
+    SQLiteUsers users(store->db_conn);
     DBOPUserInfo user;
     user.uinfo.user_id.id = "testuser";
     user.uinfo.display_name = "display_name";
     users.store_user(user);
 
-    SQLiteBuckets db_buckets(dbconn);
+    SQLiteBuckets db_buckets(store->db_conn);
     DBOPBucketInfo db_binfo;
     db_binfo.binfo.bucket = rgw_bucket("", "testbucket", "testbucket");
     db_binfo.binfo.owner = rgw_user("testuser");
@@ -77,7 +75,6 @@ class TestSFSList : public ::testing::Test {
       dump_db();
     }
     store.reset();
-    dbconn.reset();
     fs::remove_all(database_directory);
   }
 
@@ -95,23 +92,23 @@ class TestSFSList : public ::testing::Test {
     std::string name(prefix);
     name.append(gen_rand_alphanumeric(cct.get(), 23));
     const auto obj = create_test_object("testbucket", name);
-    SQLiteObjects os(dbconn);
+    SQLiteObjects os(store->db_conn);
     os.store_object(obj);
     auto ver = create_test_versionedobject(obj.uuid, "testversion");
     ver.object_state = version_state;
-    SQLiteVersionedObjects vos(dbconn);
+    SQLiteVersionedObjects vos(store->db_conn);
     vos.insert_versioned_object(ver);
     return std::make_pair(obj, ver);
   }
 
   void dump_db() {
-    auto storage = dbconn->get_storage();
+    auto storage = store->db_conn->get_storage();
     lderr(cct.get()) << "Dumping objects:" << dendl;
-    for (const auto& row : storage.get_all<DBObject>()) {
+    for (const auto& row : storage->get_all<DBObject>()) {
       lderr(cct.get()) << row << dendl;
     }
     lderr(cct.get()) << "Dumping versioned objects:" << dendl;
-    for (const auto& row : storage.get_all<DBVersionedObject>()) {
+    for (const auto& row : storage->get_all<DBVersionedObject>()) {
       lderr(cct.get()) << row << dendl;
     }
   }
@@ -122,7 +119,7 @@ class TestSFSList : public ::testing::Test {
     return e;
   }
 
-  SQLiteList make_uut() { return SQLiteList(dbconn); }
+  SQLiteList make_uut() { return SQLiteList(store->db_conn); }
 };
 
 class TestSFSListObjectsAndVersions
@@ -308,7 +305,7 @@ TEST_F(TestSFSList, objects__does_not_return_objects_with_delete_marker) {
   auto del = create_test_versionedobject(oov.first.uuid, "deletemarker");
   del.object_state = rgw::sal::sfs::ObjectState::COMMITTED;
   del.version_type = rgw::sal::sfs::VersionType::DELETE_MARKER;
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteVersionedObjects vos(store->db_conn);
   vos.insert_versioned_object(del);
 
   ASSERT_TRUE(uut.objects("testbucket", "", "", 1000, results));
@@ -333,7 +330,7 @@ TEST_F(TestSFSList, versions__returns_versions_and_delete_markers) {
   auto del = create_test_versionedobject(oov.first.uuid, "deletemarker");
   del.object_state = rgw::sal::sfs::ObjectState::COMMITTED;
   del.version_type = rgw::sal::sfs::VersionType::DELETE_MARKER;
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteVersionedObjects vos(store->db_conn);
   vos.insert_versioned_object(del);
 
   ASSERT_TRUE(uut.versions("testbucket", "", "", 1000, results));
@@ -350,8 +347,8 @@ TEST_F(TestSFSList, versions__correctly_sorts_and_marks_latest_version) {
   std::vector<rgw_bucket_dir_entry> results;
 
   const auto obj = create_test_object("testbucket", "obj");
-  SQLiteObjects os(dbconn);
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteObjects os(store->db_conn);
+  SQLiteVersionedObjects vos(store->db_conn);
   os.store_object(obj);
   auto latest = create_test_versionedobject(obj.uuid, "latest");
   latest.object_state = rgw::sal::sfs::ObjectState::COMMITTED;
@@ -385,8 +382,8 @@ TEST_F(TestSFSList, versions__there_is_latest_with_multiple_versions) {
 
   const auto obj1 = create_test_object("testbucket", "test1/a");
   const auto obj2 = create_test_object("testbucket", "test2/abc");
-  SQLiteObjects os(dbconn);
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteObjects os(store->db_conn);
+  SQLiteVersionedObjects vos(store->db_conn);
   os.store_object(obj1);
   os.store_object(obj2);
   std::array<rgw::sal::sfs::sqlite::DBVersionedObject, 3> vers_obj1 = {
@@ -434,8 +431,8 @@ TEST_F(TestSFSList, versions__only_one_latest) {
   std::vector<rgw_bucket_dir_entry> results;
 
   const auto obj = create_test_object("testbucket", "test1/a");
-  SQLiteObjects os(dbconn);
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteObjects os(store->db_conn);
+  SQLiteVersionedObjects vos(store->db_conn);
   os.store_object(obj);
   auto vo1 = create_test_versionedobject(
       obj.uuid, gen_rand_alphanumeric(cct.get(), 23)
@@ -464,8 +461,8 @@ TEST_F(TestSFSList, versions__delete_marker_latest) {
   std::vector<rgw_bucket_dir_entry> results;
 
   const auto obj = create_test_object("testbucket", "test1/a");
-  SQLiteObjects os(dbconn);
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteObjects os(store->db_conn);
+  SQLiteVersionedObjects vos(store->db_conn);
   os.store_object(obj);
   auto vo1 = create_test_versionedobject(
       obj.uuid, gen_rand_alphanumeric(cct.get(), 23)
@@ -496,8 +493,8 @@ TEST_F(TestSFSList, versions__delete_marker_is_not_latest) {
   std::vector<rgw_bucket_dir_entry> results;
 
   const auto obj = create_test_object("testbucket", "test1/a");
-  SQLiteObjects os(dbconn);
-  SQLiteVersionedObjects vos(dbconn);
+  SQLiteObjects os(store->db_conn);
+  SQLiteVersionedObjects vos(store->db_conn);
   os.store_object(obj);
   auto vo1 = create_test_versionedobject(
       obj.uuid, gen_rand_alphanumeric(cct.get(), 23)

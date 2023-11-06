@@ -186,7 +186,7 @@ class TestSFSGC : public ::testing::Test {
     mp.upload_id = upload_id;
     mp.part_num = part_num;
     mp.size = 123;
-    const int id = storage.insert(mp);
+    const int id = storage->insert(mp);
     storeRandomPart(uuid, id);
     return mp;
   }

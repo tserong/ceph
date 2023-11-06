@@ -197,17 +197,17 @@ void createDBBucketBasic(
   db_bucket.bucket_id = bucket_id;
   db_bucket.owner_id = user;
   db_bucket.deleted = false;
-  storage.replace(db_bucket);
+  storage->replace(db_bucket);
 }
 
 void deleteDBBucketBasic(
     const std::string& bucket_id, const std::shared_ptr<DBConn>& conn
 ) {
   auto storage = conn->get_storage();
-  auto bucket = storage.get_pointer<DBBucket>(bucket_id);
+  auto bucket = storage->get_pointer<DBBucket>(bucket_id);
   ASSERT_TRUE(bucket != nullptr);
   bucket->deleted = true;
-  storage.replace(*bucket);
+  storage->replace(*bucket);
 }
 
 TEST_F(TestSFSSQLiteBuckets, CreateAndGet) {
@@ -498,9 +498,9 @@ TEST_F(TestSFSSQLiteBuckets, UseStorage) {
   db_bucket.bucket_id = "test_storage_id";
 
   // we have to use replace because the primary key of rgw_bucket is a string
-  storage.replace(db_bucket);
+  storage->replace(db_bucket);
 
-  auto bucket = storage.get_pointer<DBBucket>("test_storage_id");
+  auto bucket = storage->get_pointer<DBBucket>("test_storage_id");
 
   ASSERT_NE(bucket, nullptr);
   ASSERT_EQ(bucket->bucket_name, "test_storage");
@@ -518,7 +518,7 @@ TEST_F(TestSFSSQLiteBuckets, UseStorage) {
   auto db_bucket_2 = get_db_bucket(rgw_bucket_2);
 
   // we have to use replace because the primary key of rgw_bucket is a string
-  storage.replace(db_bucket_2);
+  storage->replace(db_bucket_2);
 
   // now use the SqliteBuckets method, so user is already converted
   auto ret_bucket = db_buckets.get_bucket("BucketID1");
@@ -545,7 +545,7 @@ TEST_F(TestSFSSQLiteBuckets, CreateBucketForNonExistingUser) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_bucket);
+          storage->replace(db_bucket);
           ;
         } catch (const std::system_error& e) {
           EXPECT_STREQ(
@@ -576,7 +576,7 @@ TEST_F(TestSFSSQLiteBuckets, CreateBucketOwnerNotSet) {
   EXPECT_THROW(
       {
         try {
-          storage.replace(db_bucket);
+          storage->replace(db_bucket);
         } catch (const std::system_error& e) {
           EXPECT_STREQ(
               "FOREIGN KEY constraint failed: constraint failed", e.what()

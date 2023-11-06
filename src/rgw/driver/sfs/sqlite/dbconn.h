@@ -20,6 +20,7 @@
 #include <filesystem>
 #include <ios>
 #include <memory>
+#include <shared_mutex>
 
 #include "buckets/bucket_definitions.h"
 #include "buckets/multipart_definitions.h"
@@ -151,8 +152,8 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(VERSIONED_OBJECTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBVersionedObject::id, sqlite_orm::autoincrement(),
-              sqlite_orm::primary_key()
+              "id", &DBVersionedObject::id,
+              sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("object_id", &DBVersionedObject::object_id),
           sqlite_orm::make_column("checksum", &DBVersionedObject::checksum),
@@ -182,8 +183,7 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(ACCESS_KEYS),
           sqlite_orm::make_column(
-              "id", &DBAccessKey::id, sqlite_orm::autoincrement(),
-              sqlite_orm::primary_key()
+              "id", &DBAccessKey::id, sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("access_key", &DBAccessKey::access_key),
           sqlite_orm::make_column("user_id", &DBAccessKey::user_id),
@@ -211,8 +211,7 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(MULTIPARTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBMultipart::id, sqlite_orm::primary_key(),
-              sqlite_orm::autoincrement()
+              "id", &DBMultipart::id, sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("bucket_id", &DBMultipart::bucket_id),
           sqlite_orm::make_column("upload_id", &DBMultipart::upload_id),
@@ -236,8 +235,8 @@ inline auto _make_storage(const std::string& path) {
       sqlite_orm::make_table(
           std::string(MULTIPARTS_PARTS_TABLE),
           sqlite_orm::make_column(
-              "id", &DBMultipartPart::id, sqlite_orm::primary_key(),
-              sqlite_orm::autoincrement()
+              "id", &DBMultipartPart::id,
+              sqlite_orm::primary_key().autoincrement()
           ),
           sqlite_orm::make_column("upload_id", &DBMultipartPart::upload_id),
           sqlite_orm::make_column("part_num", &DBMultipartPart::part_num),
@@ -254,13 +253,16 @@ inline auto _make_storage(const std::string& path) {
 }
 
 using Storage = decltype(_make_storage(""));
+using StorageRef = Storage*;
 
 class DBConn {
  private:
-  Storage storage;
+  std::unordered_map<std::thread::id, Storage> storage_pool;
+  std::vector<sqlite3*> sqlite_conns;
+  const std::thread::id main_thread;
+  mutable std::shared_mutex storage_pool_mutex;
 
  public:
-  sqlite3* first_sqlite_conn;
   CephContext* const cct;
   const bool profile_enabled;
 
@@ -270,7 +272,15 @@ class DBConn {
   DBConn(const DBConn&) = delete;
   DBConn& operator=(const DBConn&) = delete;
 
-  inline auto get_storage() const { return storage; }
+  StorageRef get_storage();
+  sqlite3* first_sqlite_conn() const {
+    std::shared_lock lock(storage_pool_mutex);
+    return sqlite_conns[0];
+  }
+  std::vector<sqlite3*> all_sqlite_conns() const {
+    std::shared_lock lock(storage_pool_mutex);
+    return sqlite_conns;
+  }
 
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");

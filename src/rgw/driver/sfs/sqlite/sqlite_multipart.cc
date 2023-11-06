@@ -37,7 +37,7 @@ std::optional<std::vector<DBMultipart>> SQLiteMultipart::list_multiparts(
 ) const {
   auto storage = conn->get_storage();
 
-  auto bucket_entries = storage.get_all<DBBucket>(
+  auto bucket_entries = storage->get_all<DBBucket>(
       where(is_equal(&DBBucket::bucket_name, bucket_name))
   );
   if (bucket_entries.size() == 0) {
@@ -67,7 +67,7 @@ std::vector<DBMultipart> SQLiteMultipart::list_multiparts_by_bucket_id(
 
   auto cond = start_cond and end_cond;
 
-  auto db_entries = storage.get_all<DBMultipart>(
+  auto db_entries = storage->get_all<DBMultipart>(
       where(
           is_equal(&DBMultipart::bucket_id, bucket_id) and cond and
           greater_or_equal(&DBMultipart::meta_str, marker) and
@@ -92,8 +92,8 @@ int SQLiteMultipart::abort_multiparts_by_bucket_id(const std::string& bucket_id
 ) const {
   auto storage = conn->get_storage();
   uint64_t num_changes = 0;
-  storage.transaction([&]() mutable {
-    storage.update_all(
+  storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::ABORTED,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -102,7 +102,7 @@ int SQLiteMultipart::abort_multiparts_by_bucket_id(const std::string& bucket_id
             lesser_than(&DBMultipart::state, MultipartState::COMPLETE)
         )
     );
-    num_changes = storage.changes();
+    num_changes = storage->changes();
     return true;
   });
 
@@ -111,7 +111,7 @@ int SQLiteMultipart::abort_multiparts_by_bucket_id(const std::string& bucket_id
 
 int SQLiteMultipart::abort_multiparts(const std::string& bucket_name) const {
   auto storage = conn->get_storage();
-  auto bucket_ids_vec = storage.select(
+  auto bucket_ids_vec = storage->select(
       &DBBucket::bucket_id,
       where(
           is_equal(&DBBucket::bucket_name, bucket_name) and
@@ -134,7 +134,7 @@ std::optional<DBMultipart> SQLiteMultipart::get_multipart(
   }
 
   auto storage = conn->get_storage();
-  auto entries = storage.get_all<DBMultipart>(
+  auto entries = storage->get_all<DBMultipart>(
       where(is_equal(&DBMultipart::upload_id, upload_id))
   );
   ceph_assert(entries.size() <= 1);
@@ -149,7 +149,7 @@ std::optional<DBMultipart> SQLiteMultipart::get_multipart(int id) const {
   ceph_assert(id >= 0);
   auto storage = conn->get_storage();
   auto entries =
-      storage.get_all<DBMultipart>(where(is_equal(&DBMultipart::id, id)));
+      storage->get_all<DBMultipart>(where(is_equal(&DBMultipart::id, id)));
   ceph_assert(entries.size() <= 1);  // primary key
   std::optional<DBMultipart> mp;
   if (entries.size() == 1) {
@@ -160,7 +160,7 @@ std::optional<DBMultipart> SQLiteMultipart::get_multipart(int id) const {
 
 uint SQLiteMultipart::insert(const DBMultipart& mp) const {
   auto storage = conn->get_storage();
-  return storage.insert(mp);
+  return storage->insert(mp);
 }
 
 std::vector<DBMultipartPart> SQLiteMultipart::list_parts(
@@ -169,7 +169,7 @@ std::vector<DBMultipartPart> SQLiteMultipart::list_parts(
 ) const {
   auto storage = conn->get_storage();
   std::vector<DBMultipartPart> db_entries;
-  db_entries = storage.get_all<DBMultipartPart>(
+  db_entries = storage->get_all<DBMultipartPart>(
       where(
           is_equal(&DBMultipartPart::upload_id, upload_id) and
           is_not_null(&DBMultipartPart::etag) and
@@ -199,7 +199,7 @@ std::vector<DBMultipartPart> SQLiteMultipart::get_parts(
     const std::string& upload_id
 ) const {
   auto storage = conn->get_storage();
-  auto db_entries = storage.get_all<DBMultipartPart>(
+  auto db_entries = storage->get_all<DBMultipartPart>(
       where(is_equal(&DBMultipartPart::upload_id, upload_id)),
       order_by(&DBMultipartPart::part_num)
   );
@@ -210,7 +210,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::get_part(
     const std::string& upload_id, uint32_t part_num
 ) const {
   auto storage = conn->get_storage();
-  auto entries = storage.get_all<DBMultipartPart>(where(
+  auto entries = storage->get_all<DBMultipartPart>(where(
       is_equal(&DBMultipartPart::upload_id, upload_id) and
       is_equal(&DBMultipartPart::part_num, part_num)
   ));
@@ -227,9 +227,9 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
   auto storage = conn->get_storage();
 
   RetrySQLiteBusy<std::optional<DBMultipartPart>> retry([&]() {
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     std::optional<DBMultipartPart> entry = std::nullopt;
-    auto cnt = storage.count<DBMultipart>(where(
+    auto cnt = storage->count<DBMultipart>(where(
         is_equal(&DBMultipart::upload_id, upload_id) and
         (is_equal(&DBMultipart::state, MultipartState::INPROGRESS) or
          is_equal(&DBMultipart::state, MultipartState::INIT))
@@ -242,7 +242,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
     }
 
     // set multipart upload as being in progress
-    storage.update_all(
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::INPROGRESS,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -252,7 +252,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
     );
 
     // find if there's already a part with said upload_id/part_num combination
-    auto parts = storage.get_all<DBMultipartPart>(where(
+    auto parts = storage->get_all<DBMultipartPart>(where(
         is_equal(&DBMultipartPart::upload_id, upload_id) and
         is_equal(&DBMultipartPart::part_num, part_num)
     ));
@@ -266,7 +266,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
       part.etag = std::nullopt;
       part.mtime = std::nullopt;
       try {
-        storage.replace(part);
+        storage->replace(part);
       } catch (const std::system_error& e) {
         if (error_str) {
           *error_str = e.what();
@@ -283,7 +283,7 @@ std::optional<DBMultipartPart> SQLiteMultipart::create_or_reset_part(
           .mtime = std::nullopt,
       };
       try {
-        part.id = storage.insert(part);
+        part.id = storage->insert(part);
       } catch (const std::system_error& e) {
         if (error_str) {
           *error_str = e.what();
@@ -306,8 +306,8 @@ bool SQLiteMultipart::finish_part(
     uint64_t bytes_written
 ) const {
   auto storage = conn->get_storage();
-  bool committed = storage.transaction([&]() mutable {
-    storage.update_all(
+  bool committed = storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipartPart::etag) = etag,
             c(&DBMultipartPart::mtime) = ceph::real_time::clock::now(),
             c(&DBMultipartPart::size) = bytes_written),
@@ -317,7 +317,7 @@ bool SQLiteMultipart::finish_part(
             is_null(&DBMultipartPart::etag)
         )
     );
-    if (storage.changes() != 1) {
+    if (storage->changes() != 1) {
       return false;
     }
     return true;
@@ -327,8 +327,8 @@ bool SQLiteMultipart::finish_part(
 
 bool SQLiteMultipart::abort(const std::string& upload_id) const {
   auto storage = conn->get_storage();
-  auto committed = storage.transaction([&]() mutable {
-    storage.update_all(
+  auto committed = storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::ABORTED,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -337,7 +337,7 @@ bool SQLiteMultipart::abort(const std::string& upload_id) const {
             lesser_than(&DBMultipart::state, MultipartState::COMPLETE)
         )
     );
-    auto num_aborted = storage.changes();
+    auto num_aborted = storage->changes();
     if (num_aborted == 0) {
       return false;
     }
@@ -353,8 +353,8 @@ bool SQLiteMultipart::mark_complete(
 ) const {
   ceph_assert(duplicate != nullptr);
   auto storage = conn->get_storage();
-  auto committed = storage.transaction([&]() mutable {
-    storage.update_all(
+  auto committed = storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::COMPLETE,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -363,8 +363,8 @@ bool SQLiteMultipart::mark_complete(
             lesser_or_equal(&DBMultipart::state, MultipartState::INPROGRESS)
         )
     );
-    if (storage.changes() == 0) {
-      const auto state = storage.select(
+    if (storage->changes() == 0) {
+      const auto state = storage->select(
           columns(&DBMultipart::state),
           where(is_equal(&DBMultipart::upload_id, upload_id))
       );
@@ -382,8 +382,8 @@ bool SQLiteMultipart::mark_complete(
 
 bool SQLiteMultipart::mark_aggregating(const std::string& upload_id) const {
   auto storage = conn->get_storage();
-  auto committed = storage.transaction([&]() mutable {
-    storage.update_all(
+  auto committed = storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::AGGREGATING,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -391,7 +391,7 @@ bool SQLiteMultipart::mark_aggregating(const std::string& upload_id) const {
             is_equal(&DBMultipart::state, MultipartState::COMPLETE)
         )
     );
-    auto num_changed = storage.changes();
+    auto num_changed = storage->changes();
     if (num_changed == 0) {
       return false;
     }
@@ -404,8 +404,8 @@ bool SQLiteMultipart::mark_aggregating(const std::string& upload_id) const {
 
 bool SQLiteMultipart::mark_done(const std::string& upload_id) const {
   auto storage = conn->get_storage();
-  auto committed = storage.transaction([&]() mutable {
-    storage.update_all(
+  auto committed = storage->transaction([&]() mutable {
+    storage->update_all(
         set(c(&DBMultipart::state) = MultipartState::DONE,
             c(&DBMultipart::state_change_time) = ceph::real_time::clock::now()),
         where(
@@ -413,7 +413,7 @@ bool SQLiteMultipart::mark_done(const std::string& upload_id) const {
             is_equal(&DBMultipart::state, MultipartState::AGGREGATING)
         )
     );
-    auto num_changed = storage.changes();
+    auto num_changed = storage->changes();
     if (num_changed == 0) {
       return false;
     }
@@ -425,7 +425,7 @@ bool SQLiteMultipart::mark_done(const std::string& upload_id) const {
 
 void SQLiteMultipart::remove_parts(const std::string& upload_id) const {
   auto storage = conn->get_storage();
-  storage.remove_all<DBMultipartPart>(
+  storage->remove_all<DBMultipartPart>(
       where(c(&DBMultipartPart::upload_id) = upload_id)
   );
 }
@@ -434,7 +434,7 @@ void SQLiteMultipart::remove_multiparts_by_bucket_id(
     const std::string& bucket_id
 ) const {
   auto storage = conn->get_storage();
-  storage.remove_all<DBMultipart>(where(c(&DBMultipart::bucket_id) = bucket_id)
+  storage->remove_all<DBMultipart>(where(c(&DBMultipart::bucket_id) = bucket_id)
   );
 }
 
@@ -445,9 +445,9 @@ SQLiteMultipart::remove_multiparts_by_bucket_id_transact(
   DBDeletedMultipartItems ret_parts;
   auto storage = conn->get_storage();
   RetrySQLiteBusy<DBDeletedMultipartItems> retry([&]() {
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     // get first the list of parts to be deleted up to max_items
-    ret_parts = storage.select(
+    ret_parts = storage->select(
         columns(
             &DBMultipart::upload_id, &DBMultipart::path_uuid,
             &DBMultipartPart::id
@@ -471,14 +471,14 @@ SQLiteMultipart::remove_multiparts_by_bucket_id_transact(
       // there are no pending parts for this bucket
       // we can safely delete all multiparts in it.
       // This will take care of multiparts that had 0 parts initially
-      storage.remove_all<DBMultipart>(
+      storage->remove_all<DBMultipart>(
           where(is_equal(&DBMultipart::bucket_id, bucket_id))
       );
       transaction.commit();
       return ret_parts;
     }
     // remove the parts selected
-    storage.remove_all<DBMultipartPart>(where(in(&DBMultipartPart::id, ids)));
+    storage->remove_all<DBMultipartPart>(where(in(&DBMultipartPart::id, ids)));
 
     // now check if the multipart holding the part is empty
     std::map<std::string, bool> already_checked_mp;
@@ -487,13 +487,13 @@ SQLiteMultipart::remove_multiparts_by_bucket_id_transact(
       if (already_checked_mp.find(upload_id) == already_checked_mp.end()) {
         already_checked_mp[upload_id] = true;
 
-        auto nb_parts = storage.count(
+        auto nb_parts = storage->count(
             &DBMultipartPart::id,
             where(is_equal(&DBMultipartPart::upload_id, upload_id))
         );
         if (nb_parts == 0) {
           // delete this multipart as it has no parts
-          storage.remove_all<DBMultipart>(
+          storage->remove_all<DBMultipart>(
               where(is_equal(&DBMultipart::upload_id, upload_id))
           );
         }
@@ -511,9 +511,9 @@ SQLiteMultipart::remove_done_or_aborted_multiparts_transact(uint max_items
   DBDeletedMultipartItems ret_parts;
   auto storage = conn->get_storage();
   RetrySQLiteBusy<DBDeletedMultipartItems> retry([&]() {
-    auto transaction = storage.transaction_guard();
+    auto transaction = storage->transaction_guard();
     // get first the list of parts to be deleted up to max_items
-    ret_parts = storage.select(
+    ret_parts = storage->select(
         columns(
             &DBMultipart::upload_id, &DBMultipart::path_uuid,
             &DBMultipartPart::id
@@ -540,7 +540,7 @@ SQLiteMultipart::remove_done_or_aborted_multiparts_transact(uint max_items
       // there are no pending parts for this bucket
       // we can safely delete all multiparts in it.
       // This will take care of multiparts that had 0 parts initially
-      storage.remove_all<DBMultipart>(where(
+      storage->remove_all<DBMultipart>(where(
           is_equal(&DBMultipart::state, MultipartState::DONE) or
           is_equal(&DBMultipart::state, MultipartState::ABORTED)
       ));
@@ -548,7 +548,7 @@ SQLiteMultipart::remove_done_or_aborted_multiparts_transact(uint max_items
       return ret_parts;
     }
     // remove the parts selected
-    storage.remove_all<DBMultipartPart>(where(in(&DBMultipartPart::id, ids)));
+    storage->remove_all<DBMultipartPart>(where(in(&DBMultipartPart::id, ids)));
 
     // now check if the multipart holding the part is empty
     std::map<std::string, bool> already_checked_mp;
@@ -557,13 +557,13 @@ SQLiteMultipart::remove_done_or_aborted_multiparts_transact(uint max_items
       if (already_checked_mp.find(upload_id) == already_checked_mp.end()) {
         already_checked_mp[upload_id] = true;
 
-        auto nb_parts = storage.count(
+        auto nb_parts = storage->count(
             &DBMultipartPart::id,
             where(is_equal(&DBMultipartPart::upload_id, upload_id))
         );
         if (nb_parts == 0) {
           // delete this multipart as it has no parts
-          storage.remove_all<DBMultipart>(
+          storage->remove_all<DBMultipart>(
               where(is_equal(&DBMultipart::upload_id, upload_id))
           );
         }

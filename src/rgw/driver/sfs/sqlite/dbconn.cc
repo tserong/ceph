@@ -113,15 +113,20 @@ static int sqlite_profile_callback(
 }
 
 DBConn::DBConn(CephContext* _cct)
-    : storage(_make_storage(getDBPath(_cct))),
-      first_sqlite_conn(nullptr),
+    : main_thread(std::this_thread::get_id()),
+      storage_pool_mutex(),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
-  storage.on_open = [this](sqlite3* db) {
-    if (first_sqlite_conn == nullptr) {
-      first_sqlite_conn = db;
-    }
+  // get_storage() relies on there already being an entry in the pool
+  // for the main thread (i.e. the thread that created the DBConn).
+  storage_pool.emplace(main_thread, _make_storage(getDBPath(cct)));
+  StorageRef storage = get_storage();
+  storage->on_open = [this](sqlite3* db) {
+    // This is safe because we're either in the main thread, or inside
+    // storage->on_open() called from get_storage(), which has the exclusive
+    // mutex.
+    sqlite_conns.emplace_back(db);
 
     sqlite3_extended_result_codes(db, 1);
     sqlite3_busy_timeout(db, 10000);
@@ -149,11 +154,33 @@ DBConn::DBConn(CephContext* _cct)
       );
     }
   };
-  storage.open_forever();
-  storage.busy_timeout(5000);
+  storage->open_forever();
+  storage->busy_timeout(5000);
   maybe_upgrade_metadata();
   check_metadata_is_compatible();
-  storage.sync_schema();
+  storage->sync_schema();
+}
+
+StorageRef DBConn::get_storage() {
+  std::thread::id this_thread = std::this_thread::get_id();
+  try {
+    std::shared_lock lock(storage_pool_mutex);
+    return &storage_pool.at(this_thread);
+  } catch (const std::out_of_range& ex) {
+    std::unique_lock lock(storage_pool_mutex);
+    auto [it, _] =
+        storage_pool.emplace(this_thread, storage_pool.at(main_thread));
+    StorageRef storage = &(*it).second;
+    // A copy of the main thread's Storage object won't have an open DB
+    // connection yet, so we'd better make it have one (otherwise we're
+    // back to a gadzillion sqlite3_open()/sqlite3_close() calls again)
+    storage->open_forever();
+    storage->busy_timeout(5000);
+    lsubdout(cct, rgw, 10) << "[SQLITE CONNECTION NEW] Added Storage "
+                           << storage << " to pool for thread " << std::hex
+                           << this_thread << std::dec << dendl;
+    return storage;
+  }
 }
 
 void DBConn::check_metadata_is_compatible() const {
@@ -165,7 +192,7 @@ void DBConn::check_metadata_is_compatible() const {
   int rc = sqlite3_open(temporary_db_path.c_str(), &temporary_db);
   if (rc == SQLITE_OK) {
     sqlite3_backup* backup =
-        sqlite3_backup_init(temporary_db, "main", first_sqlite_conn, "main");
+        sqlite3_backup_init(temporary_db, "main", first_sqlite_conn(), "main");
     if (backup) {
       sqlite3_backup_step(backup, -1);
       sqlite3_backup_finish(backup);
@@ -222,11 +249,9 @@ void DBConn::check_metadata_is_compatible() const {
   }
 }
 
-static int get_version(
-    CephContext* cct, rgw::sal::sfs::sqlite::Storage& storage
-) {
+static int get_version(CephContext* cct, StorageRef storage) {
   try {
-    return storage.pragma.user_version();
+    return storage->pragma.user_version();
   } catch (const std::system_error& e) {
     lsubdout(cct, rgw, -1) << "error opening db: " << e.code().message() << " ("
                            << e.code().value() << "), " << e.what() << dendl;
@@ -324,7 +349,7 @@ static int upgrade_metadata_from_v2(sqlite3* db, std::string* errmsg) {
 }
 
 static void upgrade_metadata(
-    CephContext* cct, rgw::sal::sfs::sqlite::Storage& storage, sqlite3* db
+    CephContext* cct, StorageRef storage, sqlite3* db
 ) {
   while (true) {
     int cur_version = get_version(cct, storage);
@@ -356,20 +381,21 @@ static void upgrade_metadata(
                cur_version + 1
            )
         << dendl;
-    storage.pragma.user_version(cur_version + 1);
+    storage->pragma.user_version(cur_version + 1);
   }
 }
 
 void DBConn::maybe_upgrade_metadata() {
+  StorageRef storage = get_storage();
   int db_version = get_version(cct, storage);
   lsubdout(cct, rgw, 10) << "db user version: " << db_version << dendl;
 
   if (db_version == 0) {
     // must have just been created, set version!
-    storage.pragma.user_version(SFS_METADATA_VERSION);
+    storage->pragma.user_version(SFS_METADATA_VERSION);
   } else if (db_version < SFS_METADATA_VERSION && db_version >= SFS_METADATA_MIN_VERSION) {
     // perform schema update
-    upgrade_metadata(cct, storage, first_sqlite_conn);
+    upgrade_metadata(cct, storage, first_sqlite_conn());
   } else if (db_version < SFS_METADATA_MIN_VERSION) {
     throw sqlite_sync_exception(
         "Existing metadata too far behind! Unable to upgrade schema!"
