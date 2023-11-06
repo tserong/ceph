@@ -30,6 +30,7 @@
 #include "driver/sfs/multipart.h"
 #include "driver/sfs/object.h"
 #include "driver/sfs/object_state.h"
+#include "driver/sfs/sfs_log.h"
 #include "driver/sfs/sqlite/objects/object_definitions.h"
 #include "driver/sfs/sqlite/sqlite_list.h"
 #include "driver/sfs/sqlite/sqlite_versioned_objects.h"
@@ -37,7 +38,7 @@
 #include "rgw_common.h"
 #include "rgw_sal_sfs.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 using namespace sqlite_orm;
@@ -75,7 +76,7 @@ std::unique_ptr<Object> SFSBucket::_get_object(sfs::ObjectRef obj) {
 }
 
 std::unique_ptr<Object> SFSBucket::get_object(const rgw_obj_key& key) {
-  ldout(store->ceph_context(), 10)
+  ldout(store->ceph_context(), SFS_LOG_DEBUG)
       << "bucket::" << __func__ << ": key : " << key << dendl;
   try {
     auto objref = bucket->get(key);
@@ -88,7 +89,7 @@ std::unique_ptr<Object> SFSBucket::get_object(const rgw_obj_key& key) {
     objref->instance = key.instance;
     return _get_object(objref);
   } catch (const sfs::UnknownObjectException& _) {
-    ldout(store->ceph_context(), 10)
+    ldout(store->ceph_context(), SFS_LOG_VERBOSE)
         << "unable to find key " << key << " in bucket " << bucket->get_name()
         << dendl;
     // possibly a copy, return a placeholder
@@ -106,7 +107,7 @@ int SFSBucket::verify_list_params(
     // allow unordered is a ceph extension intended to improve performance
     // of list() by not sorting through results from all over the cluster
     lsfs_dout(
-        dpp, 10
+        dpp, SFS_LOG_VERBOSE
     ) << "unsupported allow unordered list requested. returning ordered result."
       << get_name() << dendl;
 
@@ -117,8 +118,8 @@ int SFSBucket::verify_list_params(
     }
   }
   if (!params.end_marker.empty()) {
-    lsfs_dout(dpp, 2) << "unsupported end marker (SWIFT) requested "
-                      << get_name() << dendl;
+    lsfs_verb(dpp) << "unsupported end marker (SWIFT) requested " << get_name()
+                   << dendl;
     return -ENOTSUP;
   }
   if (!params.ns.empty() && params.ns != RGW_OBJ_NS_MULTIPART) {
@@ -152,13 +153,12 @@ int SFSBucket::list(
     const DoutPrefixProvider* dpp, ListParams& params, int max,
     ListResults& results, optional_yield /* y */
 ) {
-  lsfs_dout(dpp, 10)
-      << fmt::format(
-             "listing bucket {} {} {}: max:{} params:", get_name(),
-             params.ns == RGW_OBJ_NS_MULTIPART ? "multipart" : "",
-             params.list_versions ? "versions" : "objects", max
-         )
-      << params << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "listing bucket {} {} {}: max:{} params:", get_name(),
+                         params.ns == RGW_OBJ_NS_MULTIPART ? "multipart" : "",
+                         params.list_versions ? "versions" : "objects", max
+                     )
+                  << params << dendl;
 
   const int list_params_ok = verify_list_params(dpp, params, max);
   if (list_params_ok < 0) {
@@ -186,15 +186,15 @@ int SFSBucket::list(
       e.meta.mtime = mp.mtime;
       results.objs.emplace_back(e);
     }
-    lsfs_dout(dpp, 10) << fmt::format(
-                              "success (prefix:{}, start_after:{}, "
-                              "max:{}). #objs_returned:{} "
-                              "next:{} have_more:{}",
-                              params.prefix, params.marker.name, max,
-                              params.delim, results.objs.size(),
-                              results.next_marker, results.is_truncated
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "success (prefix:{}, start_after:{}, "
+                           "max:{}). #objs_returned:{} "
+                           "next:{} have_more:{}",
+                           params.prefix, params.marker.name, max, params.delim,
+                           results.objs.size(), results.next_marker,
+                           results.is_truncated
+                       )
+                    << dendl;
     return 0;
   }
 
@@ -231,14 +231,13 @@ int SFSBucket::list(
     }
   }();
   if (!listing_succeeded) {
-    lsfs_dout(dpp, 10) << fmt::format(
-                              "list (prefix:{}, start_after:{}, "
-                              "max:{}) failed.",
-                              params.prefix, start_with, max,
-                              results.objs.size(), results.next_marker,
-                              results.is_truncated
-                          )
-                       << dendl;
+    lsfs_info(dpp) << fmt::format(
+                          "list (prefix:{}, start_after:{}, "
+                          "max:{}) failed.",
+                          params.prefix, start_with, max, results.objs.size(),
+                          results.next_marker, results.is_truncated
+                      )
+                   << dendl;
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -262,14 +261,13 @@ int SFSBucket::list(
       list.objects(get_bucket_id(), params.prefix, query, 1, objects_after);
       results.is_truncated = objects_after.size() > 0;
     }
-    lsfs_dout(dpp, 10) << fmt::format(
-                              "common prefix rollup #objs:{} -> #objs:{}, "
-                              "#prefix:{}, more:{}",
-                              results.objs.size(), new_results.size(),
-                              results.common_prefixes.size(),
-                              results.is_truncated
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "common prefix rollup #objs:{} -> #objs:{}, "
+                           "#prefix:{}, more:{}",
+                           results.objs.size(), new_results.size(),
+                           results.common_prefixes.size(), results.is_truncated
+                       )
+                    << dendl;
 
     results.objs = new_results;
   }
@@ -296,7 +294,7 @@ int SFSBucket::list(
     }
   }
 
-  lsfs_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "success (prefix:{}, start_after:{}, "
              "max:{} delim:{}). #objs_returned:{} "
@@ -322,11 +320,11 @@ int SFSBucket::remove_bucket(
 
   auto res = sfs::SFSMultipartUploadV2::abort_multiparts(dpp, store, this);
   if (res < 0) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "unable to abort multiparts on bucket {}: {}",
-                              get_name(), res
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "unable to abort multiparts on bucket {}: {}",
+                         get_name(), res
+                     )
+                  << dendl;
     if (res == -ERR_NO_SUCH_BUCKET) {
       return -ENOENT;
     }
@@ -337,8 +335,7 @@ int SFSBucket::remove_bucket(
   sfs::sqlite::SQLiteBuckets db_buckets(store->db_conn);
   auto db_bucket = db_buckets.get_bucket(get_bucket_id());
   if (!db_bucket.has_value()) {
-    ldpp_dout(dpp, 1) << __func__ << ": Bucket metadata was not found.."
-                      << dendl;
+    lsfs_verb(dpp) << __func__ << ": Bucket metadata was not found." << dendl;
     return -ENOENT;
   }
   db_bucket->deleted = true;
@@ -352,7 +349,7 @@ int SFSBucket::remove_bucket_bypass_gc(
     optional_yield /*y*/, const DoutPrefixProvider* dpp
 ) {
   /** Remove this bucket, bypassing garbage collection.  May be removed */
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -383,12 +380,12 @@ int SFSBucket::set_acl(
 int SFSBucket::chown(
     const DoutPrefixProvider* dpp, User& /*new_user*/, optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
 bool SFSBucket::is_owner(User* /*user*/) {
-  ldout(store->ceph_context(), 10) << __func__ << ": TODO" << dendl;
+  ldout(store->ceph_context(), SFS_LOG_WARN) << __func__ << ": TODO" << dendl;
   return true;
 }
 
@@ -398,7 +395,7 @@ int SFSBucket::
   // check if there are still objects owned by the bucket
   sfs::sqlite::SQLiteBuckets db_buckets(store->db_conn);
   if (!db_buckets.bucket_empty(get_bucket_id())) {
-    ldpp_dout(dpp, -1) << __func__ << ": Bucket Not Empty.." << dendl;
+    lsfs_debug(dpp) << __func__ << ": Bucket Not Empty." << dendl;
     return -ENOTEMPTY;
   }
   return 0;
@@ -456,7 +453,7 @@ std::unique_ptr<MultipartUpload> SFSBucket::get_multipart_upload(
     const std::string& with_oid, std::optional<std::string> with_upload_id,
     ACLOwner with_owner, ceph::real_time with_mtime
 ) {
-  ldout(store->ceph_context(), 10)
+  ldout(store->ceph_context(), SFS_LOG_DEBUG)
       << "bucket::" << __func__ << ": oid: " << with_oid
       << ", upload id: " << with_upload_id << dendl;
 
@@ -470,7 +467,7 @@ std::unique_ptr<MultipartUpload> SFSBucket::get_multipart_upload(
       try_resolve_mp_from_oid(
           store->db_conn, with_oid, next_oid, next_upload_id
       )) {
-    ldout(store->ceph_context(), 20)
+    ldout(store->ceph_context(), SFS_LOG_DEBUG)
         << fmt::format(
                "called without upload_id. resolved oid {} to MP oid:{} "
                "upload:{}",
@@ -511,12 +508,11 @@ int SFSBucket::list_multiparts(
     std::vector<std::unique_ptr<MultipartUpload>>& uploads,
     std::map<std::string, bool>* common_prefixes, bool* is_truncated
 ) {
-  lsfs_dout(dpp, 10)
-      << fmt::format(
-             "prefix: {}, marker: {}, delim: {}, max_uploads: {}", prefix,
-             marker, delim, max_uploads
-         )
-      << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "prefix: {}, marker: {}, delim: {}, max_uploads: {}",
+                         prefix, marker, delim, max_uploads
+                     )
+                  << dendl;
 
   return sfs::SFSMultipartUploadV2::list_multiparts(
       dpp, store, this, bucket, prefix, marker, delim, max_uploads, uploads,
@@ -527,8 +523,7 @@ int SFSBucket::list_multiparts(
 int SFSBucket::abort_multiparts(
     const DoutPrefixProvider* dpp, CephContext* /*cct*/
 ) {
-  lsfs_dout(
-      dpp, 10
+  lsfs_debug(dpp
   ) << fmt::format("aborting multipart uploads on bucket {}", get_name())
     << dendl;
   return sfs::SFSMultipartUploadV2::abort_multiparts(dpp, store, this);
@@ -537,7 +532,7 @@ int SFSBucket::abort_multiparts(
 int SFSBucket::try_refresh_info(
     const DoutPrefixProvider* dpp, ceph::real_time* /*pmtime*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -547,19 +542,19 @@ int SFSBucket::read_usage(
     RGWUsageIter& /*usage_iter*/,
     std::map<rgw_user_bucket, rgw_usage_log_entry>& /*usage*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 int SFSBucket::trim_usage(
     const DoutPrefixProvider* dpp, uint64_t /*start_epoch*/,
     uint64_t /*end_epoch*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
 int SFSBucket::rebuild_index(const DoutPrefixProvider* dpp) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -567,13 +562,13 @@ int SFSBucket::check_quota(
     const DoutPrefixProvider* dpp, RGWQuota& quota, uint64_t obj_size,
     optional_yield /*y*/, bool /*check_size_only*/
 ) {
-  ldpp_dout(dpp, 10) << __func__
-                     << ": user(max size: " << quota.user_quota.max_size
-                     << ", max objs: " << quota.user_quota.max_objects
-                     << "), bucket(max size: " << quota.bucket_quota.max_size
-                     << ", max objs: " << quota.bucket_quota.max_objects
-                     << "), obj size: " << obj_size << dendl;
-  ldpp_dout(dpp, 10) << __func__ << ": not implemented, return okay." << dendl;
+  lsfs_debug(dpp) << __func__
+                  << ": user(max size: " << quota.user_quota.max_size
+                  << ", max objs: " << quota.user_quota.max_objects
+                  << "), bucket(max size: " << quota.bucket_quota.max_size
+                  << ", max objs: " << quota.bucket_quota.max_objects
+                  << "), obj size: " << obj_size << dendl;
+  lsfs_warn(dpp) << __func__ << ": not implemented, return okay." << dendl;
   return 0;
 }
 
@@ -601,36 +596,36 @@ int SFSBucket::sync_user_stats(
 }
 
 int SFSBucket::update_container_stats(const DoutPrefixProvider* dpp) {
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "update bucket {} (id {}) stats", get_name(),
-                            get_bucket_id()
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "update bucket {} (id {}) stats", get_name(),
+                         get_bucket_id()
+                     )
+                  << dendl;
   sfs::sqlite::SQLiteBuckets bucketdb(store->db_conn);
   auto stats = bucketdb.get_stats(get_bucket_id());
 
   if (!stats.has_value()) {
-    lsfs_dout(dpp, 10) << fmt::format(
-                              "unable to obtain stats for bucket {} (id {}) -- "
-                              "no such bucket!",
-                              get_name(), get_bucket_id()
-                          )
-                       << dendl;
+    lsfs_verb(dpp) << fmt::format(
+                          "unable to obtain stats for bucket {} (id {}) -- "
+                          "no such bucket!",
+                          get_name(), get_bucket_id()
+                      )
+                   << dendl;
     return -ERR_NO_SUCH_BUCKET;
   }
 
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "bucket {} stats: size: {}, obj_cnt: {}",
-                            get_name(), stats->size, stats->obj_count
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "bucket {} stats: size: {}, obj_cnt: {}", get_name(),
+                         stats->size, stats->obj_count
+                     )
+                  << dendl;
   ent.size = ent.size_rounded = stats->size;
   ent.count = stats->obj_count;
   return 0;
 }
 
 int SFSBucket::check_bucket_shards(const DoutPrefixProvider* dpp) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 int SFSBucket::put_info(

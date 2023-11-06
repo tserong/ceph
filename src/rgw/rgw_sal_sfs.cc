@@ -59,7 +59,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 

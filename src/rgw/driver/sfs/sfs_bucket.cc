@@ -11,9 +11,10 @@
  * License version 2.1, as published by the Free Software
  * Foundation. See file COPYING.
  */
+#include "driver/sfs/sfs_log.h"
 #include "rgw_sal_sfs.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 
@@ -23,7 +24,7 @@ int SFStore::set_buckets_enabled(
     const DoutPrefixProvider* dpp,
     std::vector<rgw_bucket>& /*buckets_to_enable*/, bool /*enabled*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": TODO" << dendl;
+  lsfs_warn(dpp) << __func__ << ": TODO" << dendl;
   return -ENOTSUP;
 }
 
@@ -56,7 +57,7 @@ int SFStore::get_bucket(
   auto bucketref = it->second;
 
   auto bucket = make_unique<SFSBucket>(this, bucketref);
-  ldpp_dout(dpp, 10) << __func__ << ": bucket: " << bucket->get_name() << dendl;
+  lsfs_debug(dpp) << __func__ << ": bucket: " << bucket->get_name() << dendl;
   result->reset(bucket.release());
   return 0;
 }
@@ -66,7 +67,7 @@ int SFStore::get_bucket(
     const std::string& name, std::unique_ptr<Bucket>* bucket,
     optional_yield /*y*/
 ) {
-  ldpp_dout(dpp, 10) << __func__ << ": get_bucket by name: " << name << dendl;
+  lsfs_debug(dpp) << __func__ << ": get_bucket by name: " << name << dendl;
   std::lock_guard l(buckets_map_lock);
   auto it = buckets.find(name);
   if (it == buckets.end()) {
@@ -75,7 +76,7 @@ int SFStore::get_bucket(
   auto bucketref = it->second;
 
   auto b = make_unique<SFSBucket>(this, bucketref);
-  ldpp_dout(dpp, 10) << __func__ << ": bucket: " << b->get_name() << dendl;
+  lsfs_debug(dpp) << __func__ << ": bucket: " << b->get_name() << dendl;
   bucket->reset(b.release());
   return 0;
 }

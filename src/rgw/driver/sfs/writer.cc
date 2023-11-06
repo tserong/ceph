@@ -27,13 +27,14 @@
 #include "driver/sfs/writer.h"
 #include "rgw/driver/sfs/fmt.h"
 #include "rgw/driver/sfs/multipart_types.h"
+#include "rgw/driver/sfs/sfs_log.h"
 #include "rgw/driver/sfs/sqlite/sqlite_multipart.h"
 #include "rgw_common.h"
 #include "rgw_obj_manifest.h"
 #include "rgw_sal.h"
 #include "rgw_sal_sfs.h"
 
-#define dout_subsys ceph_subsys_rgw
+#define dout_subsys ceph_subsys_rgw_sfs
 
 using namespace std;
 
@@ -47,7 +48,7 @@ static int close_fd_for(
 
   ret = ::fsync(fd);
   if (ret < 0) {
-    lsfs_dout_for(dpp, -1, whom)
+    lsfs_err_for(dpp, whom)
         << fmt::format(
                "failed to fsync fd:{}: {}. continuing.", fd, cpp_strerror(errno)
            )
@@ -57,7 +58,7 @@ static int close_fd_for(
   ret = ::close(fd);
   fd = -1;
   if (ret < 0) {
-    lsfs_dout_for(dpp, -1, whom)
+    lsfs_err_for(dpp, whom)
         << fmt::format(
                "failed closing fd:{}: {}. continuing.", fd, cpp_strerror(errno)
            )
@@ -96,11 +97,11 @@ SFSAtomicWriter::SFSAtomicWriter(
       bytes_written(0),
       io_failed(false),
       fd(-1) {
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "head_obj: {}, bucket: {}", _head_obj->get_key(),
-                            _head_obj->get_bucket()->get_name()
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "head_obj: {}, bucket: {}", _head_obj->get_key(),
+                         _head_obj->get_bucket()->get_name()
+                     )
+                  << dendl;
 }
 
 SFSAtomicWriter::~SFSAtomicWriter() {
@@ -110,7 +111,7 @@ SFSAtomicWriter::~SFSAtomicWriter() {
     char linkname[PATH_MAX] = "?";
     const int ret = ::readlink(proc_fd_path.c_str(), linkname, PATH_MAX - 1);
     if (ret < 0) {
-      lsfs_dout(dpp, -1)
+      lsfs_err(dpp)
           << fmt::format(
                  "BUG: fd:{} still open. readlink filename:{} failed with {}",
                  fd, proc_fd_path.string(), cpp_strerror(errno)
@@ -119,13 +120,12 @@ SFSAtomicWriter::~SFSAtomicWriter() {
     } else {
       linkname[ret + 1] = '\0';
     }
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "BUG: fd:{} still open. fd resolves to filename:{}. "
-               "(io_failed:{} object_path:{}). closing fd.",
-               fd, linkname, io_failed, object_path.string()
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "BUG: fd:{} still open. fd resolves to filename:{}. "
+                         "(io_failed:{} object_path:{}). closing fd.",
+                         fd, linkname, io_failed, object_path.string()
+                     )
+                  << dendl;
     close();
   }
 }
@@ -134,8 +134,8 @@ int SFSAtomicWriter::open() noexcept {
   std::error_code ec;
   std::filesystem::create_directories(object_path.parent_path(), ec);
   if (ec) {
-    lsfs_dout(dpp, -1) << "failed to mkdir object path " << object_path << ": "
-                       << ec << dendl;
+    lsfs_err(dpp) << "failed to mkdir object path " << object_path << ": " << ec
+                  << dendl;
     switch (ec.value()) {
       case ENOSPC:
         return -ERR_QUOTA_EXCEEDED;
@@ -149,8 +149,8 @@ int SFSAtomicWriter::open() noexcept {
       object_path.c_str(), O_CREAT | O_TRUNC | O_CLOEXEC | O_WRONLY, 0644
   );
   if (ret < 0) {
-    lsfs_dout(dpp, -1) << "error opening file " << object_path << ": "
-                       << cpp_strerror(errno) << dendl;
+    lsfs_err(dpp) << "error opening file " << object_path << ": "
+                  << cpp_strerror(errno) << dendl;
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -163,27 +163,27 @@ int SFSAtomicWriter::close() noexcept {
 }
 
 void SFSAtomicWriter::cleanup() noexcept {
-  lsfs_dout(dpp, -1) << fmt::format(
-                            "cleaning up failed upload to file {}. "
-                            "returning error.",
-                            object_path.string()
-                        )
-                     << dendl;
+  lsfs_err(dpp) << fmt::format(
+                       "cleaning up failed upload to file {}. "
+                       "returning error.",
+                       object_path.string()
+                   )
+                << dendl;
 
   std::error_code ec;
   std::filesystem::remove(object_path, ec);
   if (ec) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed deleting file {}: {} {}. ignoring.",
-                              object_path.string(), ec.message(), ec.value()
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed deleting file {}: {} {}. ignoring.",
+                         object_path.string(), ec.message(), ec.value()
+                     )
+                  << dendl;
   }
 
   const auto dir_fd = ::open(object_path.parent_path().c_str(), O_RDONLY);
   int ret = ::fsync(dir_fd);
   if (ret < 0) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "failed fsyncing dir {} fd:{} for obj file {}: {}. ignoring.",
                object_path.parent_path().string(), dir_fd, object_path.string(),
@@ -195,7 +195,7 @@ void SFSAtomicWriter::cleanup() noexcept {
   try {
     objref->delete_object_version(store);
   } catch (const std::system_error& e) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "failed to remove failed upload version from database {}: {}",
                store->db_conn->get_storage()->filename(), e.what()
@@ -207,21 +207,21 @@ void SFSAtomicWriter::cleanup() noexcept {
 int SFSAtomicWriter::prepare(optional_yield /*y*/) {
   if (store->filesystem_stats_avail_bytes.load() <
       store->min_space_left_for_data_write_ops_bytes) {
-    lsfs_dout(dpp, 10) << fmt::format(
-                              "filesystem stat reservation check hit. "
-                              "avail_bytes:{} avail_pct:{} total_bytes:{}. "
-                              "returning quota error.",
-                              store->filesystem_stats_avail_bytes,
-                              store->filesystem_stats_avail_percent,
-                              store->filesystem_stats_total_bytes
-                          )
-                       << dendl;
+    lsfs_debug(dpp) << fmt::format(
+                           "filesystem stat reservation check hit. "
+                           "avail_bytes:{} avail_pct:{} total_bytes:{}. "
+                           "returning quota error.",
+                           store->filesystem_stats_avail_bytes,
+                           store->filesystem_stats_avail_percent,
+                           store->filesystem_stats_total_bytes
+                       )
+                    << dendl;
     return -ERR_QUOTA_EXCEEDED;
   }
 
   objref = bucketref->create_version(obj.get_key());
   if (!objref) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "failed to create new object version in bucket {} db:{}. "
                "failing operation.",
@@ -233,13 +233,13 @@ int SFSAtomicWriter::prepare(optional_yield /*y*/) {
   }
   object_path = store->get_data_path() / objref->get_storage_path();
 
-  lsfs_dout(dpp, 10) << "creating file at " << object_path << dendl;
+  lsfs_debug(dpp) << "creating file at " << object_path << dendl;
 
   return open();
 }
 
 int SFSAtomicWriter::process(bufferlist&& data, uint64_t offset) {
-  lsfs_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "data len: {}, offset: {}, io_failed: {}, fd: {}, fn: {}",
              data.length(), offset, io_failed, fd, object_path.string()
@@ -250,23 +250,23 @@ int SFSAtomicWriter::process(bufferlist&& data, uint64_t offset) {
   }
 
   if (data.length() == 0) {
-    lsfs_dout(dpp, 10) << "final piece, wrote " << bytes_written << " bytes"
-                       << dendl;
+    lsfs_debug(dpp) << "final piece, wrote " << bytes_written << " bytes"
+                    << dendl;
     return 0;
   }
 
   ceph_assert(fd >= 0);
   int write_ret = data.write_fd(fd, offset);
   if (write_ret < 0) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed to write size:{} offset:{} to fd:{}: {}. "
-                              "marking writer failed. "
-                              "failing future io. "
-                              "will delete partial data on completion. "
-                              "returning internal error.",
-                              data.length(), offset, fd, cpp_strerror(errno)
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed to write size:{} offset:{} to fd:{}: {}. "
+                         "marking writer failed. "
+                         "failing future io. "
+                         "will delete partial data on completion. "
+                         "returning internal error.",
+                         data.length(), offset, fd, cpp_strerror(errno)
+                     )
+                  << dendl;
     io_failed = true;
     close();
     cleanup();
@@ -289,7 +289,7 @@ int SFSAtomicWriter::complete(
     const std::string* /*user_data*/, rgw_zone_set*, bool* /*canceled*/,
     optional_yield
 ) {
-  lsfs_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "accounted_size: {}, etag: {}, set_mtime: {}, attrs: {}, "
              "delete_at: {}, if_match: {}, if_nomatch: {}",
@@ -304,7 +304,7 @@ int SFSAtomicWriter::complete(
     set_mtime = now;
   }
   if (bytes_written != accounted_size) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "data written != accounted size. {} vs. {}. failing operation. "
                "returning internal error.",
@@ -366,12 +366,12 @@ int SFSAtomicWriter::complete(
   try {
     objref->metadata_finish(store, bucketref->get_info().versioning_enabled());
   } catch (const std::system_error& e) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "failed to update db object {}: {}. "
-                              "failing operation. ",
-                              objref->name, e.what()
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed to update db object {}: {}. "
+                         "failing operation. ",
+                         objref->name, e.what()
+                     )
+                  << dendl;
     io_failed = true;
     cleanup();
     switch (e.code().value()) {
@@ -398,15 +398,13 @@ int SFSMultipartWriterV2::close() noexcept {
 }
 
 int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "upload_id: {}, part: {}", upload_id, part_num
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format("upload_id: {}, part: {}", upload_id, part_num)
+                  << dendl;
 
   // check if store has enough space.
   if (store->filesystem_stats_avail_bytes.load() <
       store->min_space_left_for_data_write_ops_bytes) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "filesystem stat reservation check hit. avail_bytes: {}, "
                "avail_pct: {}, total_bytes: {} -- return quota error.",
@@ -425,7 +423,7 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
   std::string error_str;
   auto entry = mpdb.create_or_reset_part(upload_id, part_num, &error_str);
   if (!entry.has_value()) {
-    lsfs_dout(dpp, -1)
+    lsfs_err(dpp)
         << fmt::format(
                "error adding/replacing part {} in db, upload_id: {}: {}",
                part_num, upload_id, error_str
@@ -437,19 +435,17 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
   // prepare upload's file paths.
   auto mp = mpdb.get_multipart(upload_id);
   if (!mp.has_value()) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "multipart upload {} not found!", upload_id
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format("multipart upload {} not found!", upload_id)
+                  << dendl;
     return -ERR_NO_SUCH_UPLOAD;
   }
   if (mp->state != MultipartState::INPROGRESS) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "multipart upload {} not available -- raced with "
-                              "abort or complete!",
-                              upload_id
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "multipart upload {} not available -- raced with "
+                         "abort or complete!",
+                         upload_id
+                     )
+                  << dendl;
     return -ERR_NO_SUCH_UPLOAD;
   }
 
@@ -459,11 +455,11 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
   std::error_code ec;
   std::filesystem::create_directories(path.parent_path(), ec);
   if (ec) {
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "error creating multipart upload's part paths: {}", ec.message()
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "error creating multipart upload's part paths: {}",
+                         ec.message()
+                     )
+                  << dendl;
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -472,8 +468,7 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
   int ret =
       ::open(path.c_str(), O_CREAT | O_TRUNC | O_CLOEXEC | O_WRONLY, 0600);
   if (ret < 0) {
-    lsfs_dout(
-        dpp, -1
+    lsfs_err(dpp
     ) << fmt::format("error opening file {}: {}", path, cpp_strerror(errno))
       << dendl;
     return -ERR_INTERNAL_ERROR;
@@ -483,8 +478,7 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
 
   ret = ::fsync(fd);
   if (ret < 0) {
-    lsfs_dout(
-        dpp, -1
+    lsfs_err(dpp
     ) << fmt::format("error sync'ing opened file: {}", cpp_strerror(errno))
       << dendl;
     return -ERR_INTERNAL_ERROR;
@@ -496,7 +490,7 @@ int SFSMultipartWriterV2::prepare(optional_yield /* y */) {
 int SFSMultipartWriterV2::process(bufferlist&& data, uint64_t offset) {
   auto len = data.length();
 
-  lsfs_dout(dpp, 10)
+  lsfs_debug(dpp)
       << fmt::format(
              "upload_id: {}, part: {}, data(len: {}, offset: {}), written: {}",
              upload_id, part_num, len, offset, bytes_written
@@ -506,36 +500,33 @@ int SFSMultipartWriterV2::process(bufferlist&& data, uint64_t offset) {
   sqlite::SQLiteMultipart mpdb(store->db_conn);
   auto mp = mpdb.get_multipart(upload_id);
   if (!mp.has_value()) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "multipart upload {} not found!", upload_id
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format("multipart upload {} not found!", upload_id)
+                  << dendl;
     return -ERR_NO_SUCH_UPLOAD;
   }
   if (mp->state != MultipartState::INPROGRESS) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "multipart upload {} not available -- raced with "
-                              "abort or complete!",
-                              upload_id
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "multipart upload {} not available -- raced with "
+                         "abort or complete!",
+                         upload_id
+                     )
+                  << dendl;
     return -ERR_NO_SUCH_UPLOAD;
   }
 
   if (len == 0) {
-    lsfs_dout(dpp, 10) << "nothing to write" << dendl;
+    lsfs_debug(dpp) << "nothing to write" << dendl;
     return 0;
   }
 
   ceph_assert(fd >= 0);
   int write_ret = data.write_fd(fd, offset);
   if (write_ret < 0) {
-    lsfs_dout(dpp, -1)
-        << fmt::format(
-               "failed to write size: {}, offset: {}, to fd: {}: {}", len,
-               offset, fd, cpp_strerror(write_ret)
-           )
-        << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "failed to write size: {}, offset: {}, to fd: {}: {}",
+                         len, offset, fd, cpp_strerror(write_ret)
+                     )
+                  << dendl;
     switch (write_ret) {
       case -EDQUOT:
       case -ENOSPC:
@@ -565,23 +556,23 @@ int SFSMultipartWriterV2::complete(
   //  * zones_trace
   //  * canceled
 
-  lsfs_dout(dpp, 10) << fmt::format(
-                            "accounted_size: {}, etag: {}, set_mtime: {}, "
-                            "delete_at: {}, if_match: {}, if_nomatch: {}",
-                            accounted_size, etag, to_iso_8601(set_mtime),
-                            to_iso_8601(delete_at), if_match ? if_match : "N/A",
-                            if_nomatch ? if_nomatch : "N/A"
-                        )
-                     << dendl;
+  lsfs_debug(dpp) << fmt::format(
+                         "accounted_size: {}, etag: {}, set_mtime: {}, "
+                         "delete_at: {}, if_match: {}, if_nomatch: {}",
+                         accounted_size, etag, to_iso_8601(set_mtime),
+                         to_iso_8601(delete_at), if_match ? if_match : "N/A",
+                         if_nomatch ? if_nomatch : "N/A"
+                     )
+                  << dendl;
   lsfs_dout(dpp, 10) << "attrs: " << attrs << dendl;
 
   if (bytes_written != accounted_size) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "bytes_written != accounted_size, expected {} "
-                              "byte, found {} byte.",
-                              bytes_written, accounted_size
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "bytes_written != accounted_size, expected {} "
+                         "byte, found {} byte.",
+                         bytes_written, accounted_size
+                     )
+                  << dendl;
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -589,11 +580,11 @@ int SFSMultipartWriterV2::complete(
   sqlite::SQLiteMultipart mpdb(store->db_conn);
   auto res = mpdb.finish_part(upload_id, part_num, etag, bytes_written);
   if (!res) {
-    lsfs_dout(dpp, -1) << fmt::format(
-                              "unable to finish upload_id {}, part_num {}",
-                              upload_id, part_num
-                          )
-                       << dendl;
+    lsfs_err(dpp) << fmt::format(
+                         "unable to finish upload_id {}, part_num {}",
+                         upload_id, part_num
+                     )
+                  << dendl;
     return -ERR_INTERNAL_ERROR;
   }
   auto entry = mpdb.get_part(upload_id, part_num);
