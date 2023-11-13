@@ -30,7 +30,7 @@ namespace rgw::sal::sfs::sqlite {
 
 static std::string get_temporary_db_path(CephContext* ctt) {
   auto rgw_sfs_path = ctt->_conf.get_val<std::string>("rgw_sfs_data_path");
-  auto tmp_db_name = std::string(SCHEMA_DB_NAME) + "_tmp";
+  auto tmp_db_name = std::string(DB_FILENAME) + "_tmp";
   auto db_path = std::filesystem::path(rgw_sfs_path) / std::string(tmp_db_name);
   return db_path.string();
 }

@@ -41,7 +41,8 @@ constexpr int SFS_METADATA_VERSION = 4;
 /// minimum required version to upgrade db.
 constexpr int SFS_METADATA_MIN_VERSION = 4;
 
-constexpr std::string_view SCHEMA_DB_NAME = "s3gw.db";
+constexpr std::string_view DB_FILENAME = "s3gw.db";
+constexpr std::string_view DB_WAL_FILENAME = "s3gw.db-wal";
 
 constexpr std::string_view USERS_TABLE = "users";
 constexpr std::string_view BUCKETS_TABLE = "buckets";
@@ -292,7 +293,7 @@ class DBConn {
   static std::string getDBPath(CephContext* cct) {
     auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");
     auto db_path =
-        std::filesystem::path(rgw_sfs_path) / std::string(SCHEMA_DB_NAME);
+        std::filesystem::path(rgw_sfs_path) / std::string(DB_FILENAME);
     return db_path.string();
   }
 
