@@ -403,24 +403,35 @@ int SFSBucket::
   return 0;
 }
 
+/**
+ * @brief Overwrites new_attrs param in this.attrs and flushes the object's state
+ *        in the persistent storage.
+ *
+ *        Note: merge_and_store_attrs name would suggests a merge operation between
+ *        attrs and new_attrs, but the actual usage is intended as an "overwrite"
+ *        operation.
+ *
+ *        For example, there are cases where the usage is like this:
+ *
+ *        ...
+ *          rgw::sal::Attrs new_attrs(s->bucket_attrs);
+ *          new_attrs.erase(RGW_ATTR_*);
+ *          op_ret = s->bucket->merge_and_store_attrs(this, new_attrs, s->yield);
+ *        ...
+ *
+ *        From this snippet, we can evince that the merge_and_store_attrs must
+ *        both add/replace the attributes passed with new_attrs, but at the same time
+ *        *also* subtract what is not defined in new_attrs.
+ *        This is equivalent to an overwrite operation.
+ */
 int SFSBucket::merge_and_store_attrs(
     const DoutPrefixProvider* /*dpp*/, Attrs& new_attrs, optional_yield /*y*/
 ) {
-  for (auto& it : new_attrs) {
-    attrs[it.first] = it.second;
-
-    if (it.first == RGW_ATTR_ACL) {
-      auto lval = it.second.cbegin();
-      acls.decode(lval);
-    }
-  }
-  for (auto& it : attrs) {
-    auto it_find = new_attrs.find(it.first);
-    if (it_find == new_attrs.end()) {
-      // this is an old attr that is not defined in the new_attrs
-      // delete it
-      attrs.erase(it.first);
-    }
+  attrs = new_attrs;
+  auto it = attrs.end();
+  if ((it = attrs.find(RGW_ATTR_ACL)) != attrs.end()) {
+    auto lval = it->second.cbegin();
+    acls.decode(lval);
   }
 
   sfs::get_meta_buckets(get_store().db_conn)
