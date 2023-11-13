@@ -41,6 +41,7 @@ constexpr int SFS_METADATA_VERSION = 4;
 /// minimum required version to upgrade db.
 constexpr int SFS_METADATA_MIN_VERSION = 4;
 
+constexpr std::string_view LEGACY_DB_FILENAME = "s3gw.db";
 constexpr std::string_view DB_FILENAME = "sfs.db";
 constexpr std::string_view DB_WAL_FILENAME = "sfs.db-wal";
 
@@ -297,8 +298,16 @@ class DBConn {
     return db_path.string();
   }
 
+  static std::string getLegacyDBPath(CephContext* cct) {
+    auto rgw_sfs_path = cct->_conf.get_val<std::string>("rgw_sfs_data_path");
+    auto db_path =
+        std::filesystem::path(rgw_sfs_path) / std::string(LEGACY_DB_FILENAME);
+    return db_path.string();
+  }
+
   void check_metadata_is_compatible() const;
   void maybe_upgrade_metadata();
+  void maybe_rename_database_file() const;
 };
 
 using DBConnRef = std::shared_ptr<DBConn>;
