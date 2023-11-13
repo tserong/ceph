@@ -14,6 +14,8 @@
 #pragma once
 
 #include "common/ceph_time.h"
+#include "include/ceph_assert.h"
+#include "rgw/driver/sfs/sqlite/dbapi.h"
 #include "rgw/driver/sfs/sqlite/sqlite_orm.h"
 
 /// ceph::real_time is represented as a uint64 (unsigned).
@@ -90,3 +92,41 @@ struct row_extractor<ceph::real_time> {
 };
 
 }  // namespace sqlite_orm
+
+namespace rgw::sal::sfs::dbapi::sqlite {
+
+template <>
+struct has_sqlite_type<ceph::real_time, SQLITE_INTEGER, void>
+    : ::std::true_type {};
+
+inline int bind_col_in_db(
+    sqlite3_stmt* stmt, int inx, const ceph::real_time& val
+) {
+  return sqlite3_bind_int64(
+      stmt, inx, rgw::sal::sfs::sqlite::time_point_to_int64(val)
+  );
+}
+inline void store_result_in_db(
+    sqlite3_context* db, const ceph::real_time& val
+) {
+  sqlite3_result_int64(db, rgw::sal::sfs::sqlite::time_point_to_int64(val));
+}
+inline ceph::real_time
+get_col_from_db(sqlite3_stmt* stmt, int inx, result_type<ceph::real_time>) {
+  if (sqlite3_column_type(stmt, inx) == SQLITE_NULL) {
+    ceph_abort_msg("cannot make enum value from NULL");
+  }
+  return rgw::sal::sfs::sqlite::time_point_from_int64(
+      sqlite3_column_int64(stmt, inx)
+  );
+}
+
+inline ceph::real_time
+get_val_from_db(sqlite3_value* value, result_type<ceph::real_time>) {
+  if (sqlite3_value_type(value) == SQLITE_NULL) {
+    ceph_abort_msg("cannot make enum value from NULL");
+  }
+  return rgw::sal::sfs::sqlite::time_point_from_int64(sqlite3_value_int64(value)
+  );
+}
+}  // namespace rgw::sal::sfs::dbapi::sqlite

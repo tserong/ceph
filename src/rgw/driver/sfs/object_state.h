@@ -15,9 +15,12 @@
 #define RGW_SFS_OBJECT_STATE_H
 
 #include <iostream>
+
+#include "include/ceph_assert.h"
 #if FMT_VERSION >= 90000
 #include <fmt/ostream.h>
 #endif
+#include "sqlite/dbapi.h"
 
 namespace rgw::sal::sfs {
 
@@ -45,6 +48,36 @@ inline std::string str_object_state(ObjectState state) {
   ));
   result.append(")");
   return result;
+}
+
+template <>
+struct dbapi::sqlite::has_sqlite_type<ObjectState, SQLITE_INTEGER, void>
+    : ::std::true_type {};
+
+inline int bind_col_in_db(
+    sqlite3_stmt* stmt, int inx, const rgw::sal::sfs::ObjectState& val
+) {
+  return sqlite3_bind_int(stmt, inx, static_cast<int>(val));
+}
+inline void store_result_in_db(
+    sqlite3_context* db, const rgw::sal::sfs::ObjectState& val
+) {
+  sqlite3_result_int(db, static_cast<int>(val));
+}
+inline rgw::sal::sfs::ObjectState
+get_col_from_db(sqlite3_stmt* stmt, int inx, dbapi::sqlite::result_type<rgw::sal::sfs::ObjectState>) {
+  if (sqlite3_column_type(stmt, inx) == SQLITE_NULL) {
+    ceph_abort_msg("cannot make enum value from NULL");
+  }
+  return static_cast<rgw::sal::sfs::ObjectState>(sqlite3_column_int(stmt, inx));
+}
+
+inline rgw::sal::sfs::ObjectState
+get_val_from_db(sqlite3_value* value, dbapi::sqlite::result_type<rgw::sal::sfs::ObjectState>) {
+  if (sqlite3_value_type(value) == SQLITE_NULL) {
+    ceph_abort_msg("cannot make enum value from NULL");
+  }
+  return static_cast<rgw::sal::sfs::ObjectState>(sqlite3_value_int(value));
 }
 
 }  // namespace rgw::sal::sfs

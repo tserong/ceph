@@ -26,6 +26,7 @@
 #include "buckets/multipart_definitions.h"
 #include "common/ceph_mutex.h"
 #include "common/dout.h"
+#include "dbapi.h"
 #include "lifecycle/lifecycle_definitions.h"
 #include "objects/object_definitions.h"
 #include "rgw/rgw_perf_counters.h"
@@ -255,6 +256,8 @@ inline auto _make_storage(const std::string& path) {
 using Storage = decltype(_make_storage(""));
 using StorageRef = Storage*;
 
+// TODO(https://github.com/aquarist-labs/s3gw/issues/788): Make
+// dbapi::sqlite::database the primary interface for sqlite3.
 class DBConn {
  private:
   std::unordered_map<std::thread::id, Storage> storage_pool;
@@ -280,6 +283,10 @@ class DBConn {
   std::vector<sqlite3*> all_sqlite_conns() const {
     std::shared_lock lock(storage_pool_mutex);
     return sqlite_conns;
+  }
+
+  dbapi::sqlite::database get() {
+    return dbapi::sqlite::database(get_storage()->filename());
   }
 
   static std::string getDBPath(CephContext* cct) {
