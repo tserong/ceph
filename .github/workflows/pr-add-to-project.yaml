@@ -1,0 +1,19 @@
+---
+name: Add Pull Request to S3GW Project
+on:
+  pull_request_target:
+    types:
+      - opened
+    branches:
+      - s3gw
+
+jobs:
+  add-to-project:
+    name: Add Pull Request to S3GW Project
+    runs-on: ubuntu-latest
+    steps:
+      - uses: jecluis/custom-project-status@v1.1.0
+        with:
+          project-url: https://github.com/orgs/aquarist-labs/projects/5
+          gh-token: ${{ secrets.PAT_S3GW_PROJECT_ADD }}
+          default-pr-status: "In review"
