@@ -25,6 +25,7 @@
 #include "driver/sfs/types.h"
 #include "rgw_sal.h"
 #include "rgw_sal_store.h"
+#include "sqlite/buckets/bucket_definitions.h"
 
 namespace rgw::sal {
 
@@ -200,6 +201,13 @@ class SFSBucket : public StoreBucket {
   SFStore& get_store() { return *store; }
 
   const SFStore& get_store() const { return *store; }
+
+ private:
+  sfs::sqlite::DBOPBucketInfo get_db_op_bucket_info() {
+    auto ret = sfs::sqlite::DBOPBucketInfo(get_info(), get_attrs());
+    ret.mtime = ceph::real_time::clock::now();
+    return ret;
+  }
 };
 
 }  // namespace rgw::sal

@@ -419,12 +419,13 @@ class SFStore : public StoreDriver {
     info.requester_pays = false;
     info.quota = db_binfo.binfo.quota;
     db_binfo.battrs = attrs;
+    db_binfo.mtime = ceph::real_time::clock::now();
 
     auto meta_buckets = sfs::get_meta_buckets(db_conn);
     meta_buckets->store_bucket(db_binfo);
 
     sfs::BucketRef b = std::make_shared<sfs::Bucket>(
-        ctx(), this, db_binfo.binfo, owner, db_binfo.battrs
+        ctx(), this, db_binfo.binfo, owner, db_binfo.battrs, db_binfo.mtime
     );
     buckets[bucket.name] = b;
     return b;
@@ -444,7 +445,7 @@ class SFStore : public StoreDriver {
       if (!b.deleted) {
         auto user = users.get_user(b.binfo.owner.id);
         sfs::BucketRef ref = std::make_shared<sfs::Bucket>(
-            ctx(), this, b.binfo, user->uinfo, b.battrs
+            ctx(), this, b.binfo, user->uinfo, b.battrs, b.mtime
         );
         buckets[b.binfo.bucket.name] = ref;
       }
