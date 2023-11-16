@@ -13,6 +13,7 @@
  */
 #include "dbconn.h"
 
+#include <ceph_assert.h>
 #include <sqlite3.h>
 
 #include <filesystem>
@@ -30,7 +31,7 @@ namespace rgw::sal::sfs::sqlite {
 
 static std::string get_temporary_db_path(CephContext* ctt) {
   auto rgw_sfs_path = ctt->_conf.get_val<std::string>("rgw_sfs_data_path");
-  auto tmp_db_name = std::string(SCHEMA_DB_NAME) + "_tmp";
+  auto tmp_db_name = std::string(DB_FILENAME) + "_tmp";
   auto db_path = std::filesystem::path(rgw_sfs_path) / std::string(tmp_db_name);
   return db_path.string();
 }
@@ -121,6 +122,7 @@ DBConn::DBConn(CephContext* _cct)
       storage_pool_mutex(),
       cct(_cct),
       profile_enabled(_cct->_conf.get_val<bool>("rgw_sfs_sqlite_profile")) {
+  maybe_rename_database_file();
   sqlite3_config(SQLITE_CONFIG_LOG, &sqlite_error_callback, cct);
   // get_storage() relies on there already being an entry in the pool
   // for the main thread (i.e. the thread that created the DBConn).
@@ -414,4 +416,65 @@ void DBConn::maybe_upgrade_metadata() {
   }
 }
 
+void DBConn::maybe_rename_database_file() const {
+  if (!std::filesystem::exists(getLegacyDBPath(cct))) {
+    return;
+  }
+  if (std::filesystem::exists(getDBPath(cct))) {
+    return;
+  }
+
+  lsubdout(cct, rgw_sfs, SFS_LOG_STARTUP)
+      << fmt::format(
+             "Migrating legacy database file {} -> {}", getLegacyDBPath(cct),
+             getDBPath(cct)
+         )
+      << dendl;
+
+  dbapi::sqlite::database src_db(getLegacyDBPath(cct));
+  dbapi::sqlite::database dst_db(getDBPath(cct));
+  auto state =
+      std::unique_ptr<sqlite3_backup, decltype(&sqlite3_backup_finish)>(
+          sqlite3_backup_init(
+              dst_db.connection().get(), "main", src_db.connection().get(),
+              "main"
+          ),
+          sqlite3_backup_finish
+      );
+
+  if (!state) {
+    lsubdout(cct, rgw_sfs, SFS_LOG_ERROR)
+        << fmt::format(
+               "Error opening legacy database file {} {}. Please migrate "
+               "s3gw.db to sfs.db manually",
+               getLegacyDBPath(cct), sqlite3_errmsg(dst_db.connection().get())
+           )
+        << dendl;
+    ceph_abort_msg("sfs database file migration failed");
+  }
+
+  int rc = sqlite3_backup_step(state.get(), -1);
+  if (rc != SQLITE_DONE) {
+    lsubdout(cct, rgw_sfs, SFS_LOG_ERROR)
+        << fmt::format(
+               "Error migrating legacy database file {} {}. Please migrate "
+               "s3gw.db to sfs.db manually",
+               getLegacyDBPath(cct), sqlite3_errmsg(dst_db.connection().get())
+           )
+        << dendl;
+    ceph_abort_msg("sfs database file migration failed");
+  }
+
+  std::error_code ec;  // ignore errors
+  fs::remove(getLegacyDBPath(cct), ec);
+  fs::remove(getLegacyDBPath(cct) + "-wal", ec);
+  fs::remove(getLegacyDBPath(cct) + "-shm", ec);
+
+  lsubdout(cct, rgw_sfs, SFS_LOG_STARTUP)
+      << fmt::format(
+             "Done migrating legacy database. Continuing startup with {}",
+             getDBPath(cct)
+         )
+      << dendl;
+}
 }  // namespace rgw::sal::sfs::sqlite

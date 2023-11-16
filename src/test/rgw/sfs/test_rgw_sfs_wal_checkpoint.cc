@@ -3,6 +3,7 @@
 
 #include <gtest/gtest.h>
 
+#include "driver/sfs/sqlite/dbconn.h"
 #include "rgw/rgw_sal_sfs.h"
 
 using namespace rgw::sal::sfs;
@@ -79,7 +80,7 @@ class TestSFSWALCheckpoint : public ::testing::Test {
       size_t num_threads, size_t num_objects
   ) {
     std::atomic<std::uintmax_t> max_wal_size{0};
-    fs::path wal(test_dir / "s3gw.db-wal");
+    fs::path wal(test_dir / sqlite::DB_WAL_FILENAME);
 
     std::vector<std::thread> threads;
     for (size_t i = 0; i < num_threads; ++i) {
@@ -124,7 +125,7 @@ TEST_F(TestSFSWALCheckpoint, confirm_wal_explosion) {
   // The fact that we have no size limit set means the WAL
   // won't be truncated even when the last writer completes,
   // so it should *still* be huge now.
-  EXPECT_EQ(fs::file_size(test_dir / "s3gw.db-wal"), max_wal_size);
+  EXPECT_EQ(fs::file_size(test_dir / sqlite::DB_WAL_FILENAME), max_wal_size);
 }
 
 // This test proves the WAL growth problem has been fixed
@@ -143,5 +144,5 @@ TEST_F(TestSFSWALCheckpoint, test_wal_checkpoint) {
 
   // Once the writes are all done, the WAL should be finally
   // truncated to something less than 16MB.
-  EXPECT_LT(fs::file_size(test_dir / "s3gw.db-wal"), SIZE_1MB * 16);
+  EXPECT_LT(fs::file_size(test_dir / sqlite::DB_WAL_FILENAME), SIZE_1MB * 16);
 }

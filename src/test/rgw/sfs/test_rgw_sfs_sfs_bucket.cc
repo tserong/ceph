@@ -17,7 +17,7 @@
 
 /*
   HINT
-  s3gw.db will create here: /tmp/rgw_sfs_tests
+  Creates sqlite files in /tmp/rgw_sfs_tests
 */
 
 using namespace rgw::sal::sfs::sqlite;
@@ -43,9 +43,7 @@ class TestSFSBucket : public ::testing::Test {
   }
 
   fs::path getDBFullPath(const std::string& base_dir) const {
-    auto db_full_name = "s3gw.db";
-    auto db_full_path = fs::path(base_dir) / db_full_name;
-    return db_full_path;
+    return fs::path(base_dir) / DB_FILENAME;
   }
 
   fs::path getDBFullPath() const { return getDBFullPath(getTestDir()); }

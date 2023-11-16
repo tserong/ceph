@@ -58,9 +58,7 @@ class TestSFSGC : public ::testing::Test {
   }
 
   fs::path getDBFullPath(const std::string& base_dir) const {
-    auto db_full_name = "s3gw.db";
-    auto db_full_path = fs::path(base_dir) / db_full_name;
-    return db_full_path;
+    return fs::path(base_dir) / DB_FILENAME;
   }
 
   fs::path getDBFullPath() const { return getDBFullPath(getTestDir()); }
@@ -73,7 +71,7 @@ class TestSFSGC : public ::testing::Test {
         [](const std::filesystem::path& path) {
           return (
               std::filesystem::is_regular_file(path) &&
-              !path.filename().string().starts_with("s3gw.db")
+              !path.filename().string().starts_with(DB_FILENAME)
           );
         }
     );
