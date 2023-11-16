@@ -592,7 +592,8 @@ SFStore::custom_metric_fns() {
             perfcounter_type_d::PERFCOUNTER_U64, "sfs_sqlite_connection_count",
             static_cast<double>(sqlite_fds)
         );
-      }};
+      }
+  };
   return fns;
 }
 

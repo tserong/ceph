@@ -268,7 +268,8 @@ TEST_F(
   const std::array<ObjectRef, 3> objects = {
       bucket->create_version(rgw_obj_key("foo", "version1")),
       bucket->create_version(rgw_obj_key("foo", "version2")),
-      bucket->create_version(rgw_obj_key("foo", "version3"))};
+      bucket->create_version(rgw_obj_key("foo", "version3"))
+  };
   ASSERT_EQ(database_object_state(objects[0]), ObjectState::OPEN);
   ASSERT_EQ(database_object_state(objects[1]), ObjectState::OPEN);
   ASSERT_EQ(database_object_state(objects[2]), ObjectState::OPEN);
@@ -292,7 +293,8 @@ TEST_F(
   const std::array<ObjectRef, 3> objects = {
       bucket->create_version(rgw_obj_key("foo", "version1")),
       bucket->create_version(rgw_obj_key("foo", "version2")),
-      bucket->create_version(rgw_obj_key("foo", "version3"))};
+      bucket->create_version(rgw_obj_key("foo", "version3"))
+  };
   ASSERT_TRUE(objects[0]->metadata_finish(store.get(), true));
   ASSERT_EQ(database_object_state(objects[0]), ObjectState::COMMITTED);
   ASSERT_EQ(database_object_state(objects[1]), ObjectState::OPEN);

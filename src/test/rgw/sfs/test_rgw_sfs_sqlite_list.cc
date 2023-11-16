@@ -395,7 +395,8 @@ TEST_F(TestSFSList, versions__there_is_latest_with_multiple_versions) {
       ),
       create_test_versionedobject(
           obj1.uuid, gen_rand_alphanumeric(cct.get(), 23)
-      )};
+      )
+  };
   for (size_t i = 0; i < vers_obj1.size(); i++) {
     vers_obj1[i].object_state = rgw::sal::sfs::ObjectState::COMMITTED;
     vers_obj1[i].commit_time = ceph::real_time(std::chrono::seconds(i));
@@ -410,7 +411,8 @@ TEST_F(TestSFSList, versions__there_is_latest_with_multiple_versions) {
       ),
       create_test_versionedobject(
           obj2.uuid, gen_rand_alphanumeric(cct.get(), 23)
-      )};
+      )
+  };
   for (size_t i = 0; i < vers_obj2.size(); i++) {
     vers_obj2[i].object_state = rgw::sal::sfs::ObjectState::COMMITTED;
     vers_obj2[i].commit_time = ceph::real_time(std::chrono::seconds(i + 10));
@@ -548,7 +550,8 @@ TEST_F(TestSFSList, roll_up_example) {
       make_dentry_with_name("photos/2006/January/sample.jpg"),
       make_dentry_with_name("photos/2006/February/sample2.jpg"),
       make_dentry_with_name("photos/2006/February/sample3.jpg"),
-      make_dentry_with_name("photos/2006/February/sample4.jpg")};
+      make_dentry_with_name("photos/2006/February/sample4.jpg")
+  };
   const auto expected_still_exists = objects[0];
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
@@ -577,7 +580,8 @@ TEST_F(TestSFSList, roll_up_no_such_delim_in_equals_out) {
   const auto uut = make_uut();
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("prefix/aaa"), make_dentry_with_name("prefix/bbb"),
-      make_dentry_with_name("prefix/ccc")};
+      make_dentry_with_name("prefix/ccc")
+  };
   const auto expected_still_exists = objects[0];
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
@@ -595,7 +599,8 @@ TEST_F(TestSFSList, roll_up_multi_delim_group_by_first) {
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("prefix/aaa/1"),
       make_dentry_with_name("prefix/bbb/2"),
-      make_dentry_with_name("prefix/ccc/3")};
+      make_dentry_with_name("prefix/ccc/3")
+  };
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
 
@@ -611,7 +616,8 @@ TEST_F(TestSFSList, roll_up_multi_prefixes) {
   const auto uut = make_uut();
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("a/1"), make_dentry_with_name("b/2"),
-      make_dentry_with_name("c/3")};
+      make_dentry_with_name("c/3")
+  };
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
 
@@ -630,7 +636,8 @@ TEST_F(TestSFSList, roll_up_empty_delimiter_prefix_is_copy) {
   const auto uut = make_uut();
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("a"), make_dentry_with_name("b"),
-      make_dentry_with_name("c")};
+      make_dentry_with_name("c")
+  };
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
 
@@ -647,7 +654,8 @@ TEST_F(TestSFSList, roll_up_starts_after_prefix) {
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("prefix/xxx"),
       make_dentry_with_name("prefix/yyy/0"),
-      make_dentry_with_name("something/else")};
+      make_dentry_with_name("something/else")
+  };
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
 
@@ -667,7 +675,8 @@ TEST_F(TestSFSList, roll_up_a_multichar_delimiters_work) {
       make_dentry_with_name("photosDeLiM2006DeLiMJanuaryDeLiMsample.jpg"),
       make_dentry_with_name("photosDeLiM2006DeLiMFebruaryDeLiMsample2.jpg"),
       make_dentry_with_name("photosDeLiM2006DeLiMFebruaryDeLiMsample3.jpg"),
-      make_dentry_with_name("photosDeLiM2006DeLiMFebruaryDeLiMsample4.jpg")};
+      make_dentry_with_name("photosDeLiM2006DeLiMFebruaryDeLiMsample4.jpg")
+  };
   const auto expected_still_exists = objects[0];
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
@@ -686,7 +695,8 @@ TEST_F(TestSFSList, roll_up_delim_must_follow_prefix) {
   const std::vector<rgw_bucket_dir_entry> objects{
       make_dentry_with_name("prefix"), make_dentry_with_name("prefixDELIM"),
       make_dentry_with_name("prefixDELIMsomething"),
-      make_dentry_with_name("prefixSOMETHING")};
+      make_dentry_with_name("prefixSOMETHING")
+  };
   std::map<std::string, bool> prefixes;
   std::vector<rgw_bucket_dir_entry> out;
 
