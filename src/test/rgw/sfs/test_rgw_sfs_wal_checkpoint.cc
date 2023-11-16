@@ -134,7 +134,7 @@ TEST_F(TestSFSWALCheckpoint, test_wal_checkpoint) {
   init_store();
 
   // Using our SFS checkpoint mechanism, the WAL may exceed
-  // 16MB while writing, because the trunacte checkpoints
+  // 16MB while writing, because the truncate checkpoints
   // don't always succeed, but it shouldn't go over by much.
   // We're allowing 32MB here for some extra wiggle room
   // just in case.

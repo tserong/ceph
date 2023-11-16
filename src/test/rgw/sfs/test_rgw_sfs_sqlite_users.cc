@@ -397,7 +397,8 @@ TEST_F(TestSFSSQLiteUsers, StoreListUsers) {
   ASSERT_EQ(userIds.size(), 3);
   std::vector<std::string> users_vector{
       std::make_move_iterator(userIds.begin()),
-      std::make_move_iterator(userIds.end())};
+      std::make_move_iterator(userIds.end())
+  };
   ASSERT_EQ(users_vector[0], "test1");
   ASSERT_EQ(users_vector[1], "test2");
   ASSERT_EQ(users_vector[2], "test3");
@@ -647,7 +648,8 @@ TEST_F(TestSFSSQLiteUsers, StoreRemoveUser) {
   ASSERT_EQ(userIds.size(), 3);
   std::vector<std::string> users_vector{
       std::make_move_iterator(userIds.begin()),
-      std::make_move_iterator(userIds.end())};
+      std::make_move_iterator(userIds.end())
+  };
   ASSERT_EQ(users_vector[0], "test1");
   ASSERT_EQ(users_vector[1], "test2");
   ASSERT_EQ(users_vector[2], "test3");
@@ -665,7 +667,8 @@ TEST_F(TestSFSSQLiteUsers, StoreRemoveUser) {
   ASSERT_EQ(userIds.size(), 2);
   std::vector<std::string> users_after_remove_vector{
       std::make_move_iterator(userIds.begin()),
-      std::make_move_iterator(userIds.end())};
+      std::make_move_iterator(userIds.end())
+  };
   ASSERT_EQ(users_after_remove_vector[0], "test1");
   ASSERT_EQ(users_after_remove_vector[1], "test3");
 }

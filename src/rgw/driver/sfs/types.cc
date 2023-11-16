@@ -87,7 +87,8 @@ Object* Object::create_from_db_version(
       .size = version.size,
       .etag = version.etag,
       .mtime = version.mtime,
-      .delete_at = version.delete_time};
+      .delete_at = version.delete_time
+  };
   result->attrs = version.attrs;
   return result;
 }
@@ -106,7 +107,8 @@ Object* Object::create_from_db_version(
       .size = sqlite::get_size(version),
       .etag = sqlite::get_etag(version),
       .mtime = sqlite::get_mtime(version),
-      .delete_at = sqlite::get_delete_time(version)};
+      .delete_at = sqlite::get_delete_time(version)
+  };
   result->attrs = sqlite::get_attrs(version);
   return result;
 }
@@ -164,7 +166,8 @@ Object* Object::try_fetch_from_database(
       .size = version->size,
       .etag = version->etag,
       .mtime = version->mtime,
-      .delete_at = version->delete_time};
+      .delete_at = version->delete_time
+  };
   result->attrs = version->attrs;
 
   return result;

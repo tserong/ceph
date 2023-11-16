@@ -155,8 +155,8 @@ RGWStatusFrontend::RGWStatusFrontend(
       acceptor(
           ioc,
           {net::ip::make_address(conf->get_val("bind", "127.0.0.1")),
-           static_cast<unsigned short>(std::stoi(conf->get_val("port", "9090"))
-           )}
+           static_cast<unsigned short>(std::stoi(conf->get_val("port", "9090")))
+          }
       ),
       socket(ioc),
       server_thread(this) {}

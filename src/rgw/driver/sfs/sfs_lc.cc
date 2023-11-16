@@ -57,7 +57,8 @@ int SFSLifecycle::get_next_entry(
 int SFSLifecycle::set_entry(const std::string& oid, LCEntry& entry) {
   rgw::sal::sfs::sqlite::SQLiteLifecycle sqlite_lc(store->db_conn);
   rgw::sal::sfs::sqlite::DBOPLCEntry db_entry{
-      oid, entry.get_bucket(), entry.get_start_time(), entry.get_status()};
+      oid, entry.get_bucket(), entry.get_start_time(), entry.get_status()
+  };
   sqlite_lc.store_entry(db_entry);
   return 0;
 }
@@ -96,7 +97,8 @@ int SFSLifecycle::get_head(
 int SFSLifecycle::put_head(const std::string& oid, LCHead& head) {
   rgw::sal::sfs::sqlite::SQLiteLifecycle sqlite_lc(store->db_conn);
   rgw::sal::sfs::sqlite::DBOPLCHead db_head{
-      oid, head.get_marker(), head.get_start_date()};
+      oid, head.get_marker(), head.get_start_date()
+  };
   sqlite_lc.store_head(db_head);
   return 0;
 }

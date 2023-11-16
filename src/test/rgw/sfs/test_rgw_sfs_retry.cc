@@ -44,7 +44,8 @@ TEST_F(TestSFSRetrySQLite, retry_non_crit_till_failure) {
 TEST_F(TestSFSRetrySQLiteDeathTest, crit_aborts) {
   GTEST_FLAG_SET(death_test_style, "threadsafe");
   auto exception = std::system_error{
-      SQLITE_CORRUPT, sqlite_orm::get_sqlite_error_category()};
+      SQLITE_CORRUPT, sqlite_orm::get_sqlite_error_category()
+  };
   RetrySQLiteBusy<int> uut([&]() {
     throw exception;
     return 0;

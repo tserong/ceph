@@ -1471,7 +1471,8 @@ TEST_F(TestSFSBucket, ListNamespaceMultipartsBasics) {
       .object_name = "object_name",
       .path_uuid = uuid,
       .meta_str = "metastr",
-      .mtime = now};
+      .mtime = now
+  };
   int id = multipart.insert(mpop);
   ASSERT_GE(id, 0);
 

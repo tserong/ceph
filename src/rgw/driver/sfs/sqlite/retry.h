@@ -89,7 +89,7 @@ class RetrySQLiteBusy {
     return std::nullopt;
   };
 
-  /// successful returns true if fn finished successful, possilby
+  /// successful returns true if fn finished successful, possibly
   /// after retries
   bool successful() { return m_successful; };
   /// failed_error returns the non-critical error code of the last
