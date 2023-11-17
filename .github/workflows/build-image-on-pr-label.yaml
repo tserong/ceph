@@ -58,6 +58,7 @@ jobs:
             S3GW_VERSION=${{ env.IMAGE_TAG }}
             NPROC=16
             QUAY_EXPIRATION=1w
+            SRC_S3GW_DIR=s3gw
           tags: |
             quay.io/s3gw/s3gw:${{ env.IMAGE_TAG }}
           file: s3gw/Dockerfile

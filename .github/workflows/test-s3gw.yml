@@ -72,6 +72,7 @@ jobs:
           docker build \
             --build-arg CMAKE_BUILD_TYPE=Debug \
             --build-arg NPROC=16 \
+            --build-arg SRC_S3GW_DIR=s3gw \
             --file s3gw/Dockerfile \
             --tag s3gw:${IMAGE_TAG} \
             .
@@ -88,8 +89,8 @@ jobs:
             -p 7480:7480 \
             -v $GITHUB_WORKSPACE/integration/storage:/data \
             s3gw:${IMAGE_TAG} \
-              --rgw-backend-store sfs \
-              --debug-rgw 1 \
+              --debug low \
+              -- \
               --rgw-lc-debug-interval 10)
 
           wait_for_http_200 "http://127.0.0.1:7480"
@@ -113,8 +114,7 @@ jobs:
             -p 7480:7480 \
             -v $GITHUB_WORKSPACE/smoke/storage:/data \
             s3gw:${IMAGE_TAG} \
-              --rgw-backend-store sfs \
-              --debug-rgw 1)
+              --debug low)
 
           wait_for_http_200 "http://127.0.0.1:7480"
 
