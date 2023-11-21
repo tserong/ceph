@@ -355,6 +355,30 @@ static int upgrade_metadata_from_v2(sqlite3* db, std::string* errmsg) {
   return 0;
 }
 
+static int upgrade_metadata_from_v4(sqlite3* db, std::string* errmsg) {
+  auto rc = sqlite3_exec(
+      db,
+      fmt::format(
+          "ALTER TABLE {} ADD COLUMN mtime INTEGER NOT NULL DEFAULT 0",
+          BUCKETS_TABLE
+      )
+          .c_str(),
+      nullptr, nullptr, nullptr
+  );
+
+  if (rc != SQLITE_OK) {
+    if (errmsg != nullptr) {
+      *errmsg = fmt::format(
+          "Error creating column 'mtime' in table '{}': {}", BUCKETS_TABLE,
+          sqlite3_errmsg(db)
+      );
+    }
+    return -1;
+  }
+
+  return 0;
+}
+
 static void upgrade_metadata(
     CephContext* cct, StorageRef storage, sqlite3* db
 ) {
@@ -372,6 +396,8 @@ static void upgrade_metadata(
       rc = upgrade_metadata_from_v1(db, &errmsg);
     } else if (cur_version == 2) {
       rc = upgrade_metadata_from_v2(db, &errmsg);
+    } else if (cur_version == 4) {
+      rc = upgrade_metadata_from_v4(db, &errmsg);
     }
 
     if (rc < 0) {
