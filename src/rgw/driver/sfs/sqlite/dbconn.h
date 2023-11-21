@@ -37,7 +37,7 @@
 namespace rgw::sal::sfs::sqlite {
 
 /// current db version.
-constexpr int SFS_METADATA_VERSION = 4;
+constexpr int SFS_METADATA_VERSION = 5;
 /// minimum required version to upgrade db.
 constexpr int SFS_METADATA_MIN_VERSION = 4;
 
@@ -139,7 +139,9 @@ inline auto _make_storage(const std::string& path) {
           sqlite_orm::make_column("deleted", &DBBucket::deleted),
           sqlite_orm::make_column("bucket_attrs", &DBBucket::bucket_attrs),
           sqlite_orm::make_column("object_lock", &DBBucket::object_lock),
-          sqlite_orm::make_column("mtime", &DBBucket::mtime),
+          sqlite_orm::make_column(
+              "mtime", &DBBucket::mtime, sqlite_orm::default_value(0)
+          ),
           sqlite_orm::foreign_key(&DBBucket::owner_id)
               .references(&DBUser::user_id)
       ),
