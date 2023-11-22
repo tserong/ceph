@@ -18,6 +18,7 @@
 #include <system_error>
 #include <thread>
 
+#include "dbapi.h"
 #include "errors.h"
 #include "rgw_perf_counters.h"
 
@@ -39,7 +40,7 @@ class RetrySQLiteBusy {
   const int m_max_retries{10};
   bool m_successful{false};
   int m_retries{0};
-  std::error_code m_failed_error{};
+  int m_failed_sqlite_error{};
 
  public:
   RetrySQLiteBusy(Func&& fn) : m_fn(std::forward<Func>(fn)) {}
@@ -60,17 +61,36 @@ class RetrySQLiteBusy {
       try {
         Return result = m_fn();
         m_successful = true;
-        m_failed_error = std::error_code{};
+        m_failed_sqlite_error = SQLITE_OK;
         m_retries = retry;
         return result;
+        // TODO(https://github.com/aquarist-labs/s3gw/issues/788) Remove
+        // sqlite_orm path
       } catch (const std::system_error& ex) {
-        m_failed_error = ex.code();
+        m_failed_sqlite_error = ex.code().value();
         if (critical_error(ex.code().value())) {
           ceph_abort_msgf(
               "Critical SQLite error %d. Shutting down.", ex.code().value()
           );
         }
         if (!busy_error(ex.code().value())) {
+          // Rethrow, expect a higher layer to handle (e.g constraint
+          // violations), reply internal server error or shut us down
+          throw ex;
+        }
+        std::this_thread::sleep_for(10ms * retry);
+        m_retries = retry;
+        if (perfcounter) {
+          perfcounter->inc(l_rgw_sfs_sqlite_retry_retried_count, 1);
+        }
+      } catch (const dbapi::sqlite::sqlite_exception& ex) {
+        m_failed_sqlite_error = ex.get_code();
+        if (critical_error(ex.get_code())) {
+          ceph_abort_msgf(
+              "Critical SQLite error %d. Shutting down.", ex.get_code()
+          );
+        }
+        if (!busy_error(ex.get_code())) {
           // Rethrow, expect a higher layer to handle (e.g constraint
           // violations), reply internal server error or shut us down
           throw ex;
@@ -94,7 +114,7 @@ class RetrySQLiteBusy {
   bool successful() { return m_successful; };
   /// failed_error returns the non-critical error code of the last
   /// failed attempt to run fn
-  std::error_code failed_error() { return m_failed_error; };
+  int failed_error() { return m_failed_sqlite_error; };
   /// retries returns the number of retries to failure or success
   int retries() { return m_retries; };
 };
