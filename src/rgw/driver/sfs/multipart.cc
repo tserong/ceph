@@ -18,6 +18,7 @@
 #include <stdio.h>
 #include <unistd.h>
 
+#include <filesystem>
 #include <fstream>
 
 #include "rgw/driver/sfs/fmt.h"
@@ -441,6 +442,14 @@ int SFSMultipartUploadV2::complete(
                bucketref->get_bucket_id(), mp->object_name, e.what()
            )
         << dendl;
+    std::filesystem::remove(objpath, ec);
+    return -ERR_INTERNAL_ERROR;
+  }
+  if (!objref) {
+    // We were unable to create a version, but this might very well have been
+    // because we conflicted with another in-flight transaction. Lets return
+    // back to the user, and they can complete it again if they so desire.
+    std::filesystem::remove(objpath, ec);
     return -ERR_INTERNAL_ERROR;
   }
   auto destpath = store->get_data_path() / objref->get_storage_path();
@@ -456,6 +465,7 @@ int SFSMultipartUploadV2::complete(
                destpath, ec.message()
            )
         << dendl;
+    std::filesystem::remove(objpath, ec);
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -467,6 +477,7 @@ int SFSMultipartUploadV2::complete(
                          objpath, destpath, cpp_strerror(errno)
                      )
                   << dendl;
+    std::filesystem::remove(objpath, ec);
     return -ERR_INTERNAL_ERROR;
   }
 
@@ -499,12 +510,19 @@ int SFSMultipartUploadV2::complete(
        .delete_at = ceph::real_time()}
   );
   try {
-    objref->metadata_finish(store, bucketref->get_info().versioning_enabled());
+    res = objref->metadata_finish(
+        store, bucketref->get_info().versioning_enabled()
+    );
   } catch (const std::system_error& e) {
     lsfs_err(dpp) << fmt::format(
                          "failed to update db object {}: {}", objref->name,
                          e.what()
                      )
+                  << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+  if (!res) {
+    lsfs_err(dpp) << fmt::format("failed to update db object {}", objref->name)
                   << dendl;
     return -ERR_INTERNAL_ERROR;
   }
