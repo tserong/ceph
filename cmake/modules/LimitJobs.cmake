@@ -2,6 +2,11 @@ set(MAX_COMPILE_MEM 3500 CACHE INTERNAL "maximum memory used by each compiling j
 set(MAX_LINK_MEM 4500 CACHE INTERNAL "maximum memory used by each linking job (in MiB)")
 
 cmake_host_system_information(RESULT _num_cores QUERY NUMBER_OF_LOGICAL_CORES)
+# This will never be zero on a real system, but it can be if you're doing
+# weird things like trying to cross-compile using qemu emulation.
+if(_num_cores EQUAL 0)
+  set(_num_cores 1)
+endif()
 cmake_host_system_information(RESULT _total_mem QUERY TOTAL_PHYSICAL_MEMORY)
 
 math(EXPR _avg_compile_jobs "${_total_mem} / ${MAX_COMPILE_MEM}")
