@@ -510,12 +510,19 @@ int SFSMultipartUploadV2::complete(
        .delete_at = ceph::real_time()}
   );
   try {
-    objref->metadata_finish(store, bucketref->get_info().versioning_enabled());
+    res = objref->metadata_finish(
+        store, bucketref->get_info().versioning_enabled()
+    );
   } catch (const std::system_error& e) {
     lsfs_err(dpp) << fmt::format(
                          "failed to update db object {}: {}", objref->name,
                          e.what()
                      )
+                  << dendl;
+    return -ERR_INTERNAL_ERROR;
+  }
+  if (!res) {
+    lsfs_err(dpp) << fmt::format("failed to update db object {}", objref->name)
                   << dendl;
     return -ERR_INTERNAL_ERROR;
   }
