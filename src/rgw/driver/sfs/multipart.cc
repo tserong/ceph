@@ -443,6 +443,12 @@ int SFSMultipartUploadV2::complete(
         << dendl;
     return -ERR_INTERNAL_ERROR;
   }
+  if (!objref) {
+    // We were unable to create a version, but this might very well have been
+    // because we conflicted with another in-flight transaction. Lets return
+    // back to the user, and they can complete it again if they so desire.
+    return -ERR_INTERNAL_ERROR;
+  }
   auto destpath = store->get_data_path() / objref->get_storage_path();
   lsfs_debug(dpp
   ) << fmt::format("moving final object from {} to {}", objpath, destpath)
