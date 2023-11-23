@@ -37,9 +37,10 @@ std::optional<std::vector<DBMultipart>> SQLiteMultipart::list_multiparts(
 ) const {
   auto storage = conn->get_storage();
 
-  auto bucket_entries = storage->get_all<DBBucket>(
-      where(is_equal(&DBBucket::bucket_name, bucket_name))
-  );
+  auto bucket_entries = storage->get_all<DBBucket>(where(
+      is_equal(&DBBucket::bucket_name, bucket_name) and
+      is_equal(&DBBucket::deleted, false)
+  ));
   if (bucket_entries.size() == 0) {
     return std::nullopt;
   }
