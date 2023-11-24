@@ -5,7 +5,11 @@ cmake_host_system_information(RESULT _num_cores QUERY NUMBER_OF_LOGICAL_CORES)
 # This will never be zero on a real system, but it can be if you're doing
 # weird things like trying to cross-compile using qemu emulation.
 if(_num_cores EQUAL 0)
-  set(_num_cores 1)
+  execute_process(
+    COMMAND "nproc"
+    OUTPUT_VARIABLE _num_cores
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  message(WARNING "Unable to query NUMBER_OF_LOGICAL_CORES, defaulting to nproc (${_num_cores})")
 endif()
 cmake_host_system_information(RESULT _total_mem QUERY TOTAL_PHYSICAL_MEMORY)
 
